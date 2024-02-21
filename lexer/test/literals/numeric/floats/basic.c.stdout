@@ -1,0 +1,5 @@
+1:1 -> 1:4          1.2                 FLOAT_LITERAL       
+1:5 -> 1:9          1.23                FLOAT_LITERAL       
+1:10 -> 1:15        1.234               FLOAT_LITERAL       
+1:16 -> 1:24        0.123456            FLOAT_LITERAL       
+1:25 -> 1:32        123.456             FLOAT_LITERAL       

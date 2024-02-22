@@ -131,7 +131,7 @@ void Lexer::lexToken() {
     case ',':
         emitToken(TokenType::COMMA);
         break;
-    case ';':
+    case ';': {
         emitToken(TokenType::SEMICOLON);
         break;
         // s    case '"': {
@@ -146,7 +146,7 @@ void Lexer::lexToken() {
         }
         emitToken(TokenType::STRING_LITERAL);
         break;
-        ken(TokenType::STRING_LITERAL);
+    }
     // Number
     case '0':
     case '1':
@@ -159,19 +159,20 @@ void Lexer::lexToken() {
     case '8':
     case '9': {
         int dotcount = 0;
-        char c = peek();
+        c = peek();
         while (isDigit(c) || c == '.') {
             if (c == '.')
                 dotcount++;
-            c = peek();
             advance();
+            c = peek();
         }
         if (dotcount == 0)
             emitToken(TokenType::INT_LITERAL);
         else if (dotcount == 1)
             emitToken(TokenType::FLOAT_LITERAL);
         else
-            error("Float literals must only contain one decimal");
+            error("Float literals must only contain one decimal point");
+        break;
     }
     default:
         error(fmt::format("Invalid character '{}'", c));

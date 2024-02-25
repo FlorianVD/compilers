@@ -8,10 +8,26 @@
 #include <fmt/core.h>
 #include <iostream>
 #include <iterator>
+#include <sstream>
 
 #define DEBUG_TYPE "lexer"
 
 bool isDigit(char c) { return '0' <= c && c <= '9'; }
+
+bool isIdentifierStartCharacter(char c) {
+    bool lower_char = ('a' <= c && c <= 'z');
+    bool upper_char = ('A' <= c && c <= 'Z');
+    bool underscore = c == '_';
+    return lower_char || upper_char || underscore;
+}
+
+bool isIdentifierCharacter(char c) {
+    bool lower_char = ('a' <= c && c <= 'z');
+    bool upper_char = ('A' <= c && c <= 'Z');
+    bool digit = isDigit(c);
+    bool underscore = c == '_';
+    return lower_char || upper_char || digit || underscore;
+}
 
 Lexer::Lexer(const std::string &input)
     : input(input), begin_location(1, 1), end_location(1, 1) {
@@ -134,18 +150,20 @@ void Lexer::lexToken() {
     case ';': {
         emitToken(TokenType::SEMICOLON);
         break;
-        // s    case '"': {
+    case '"': {
         char peeked_char = peek();
         while (peeked_char != '"' && peeked_char != '\n' && !isAtEnd()) {
             advance();
             peeked_char = peek();
         }
-        if (peeked_char != '"') {
+        if (peeked_char == '"') {
+            advance();
+            emitToken(TokenType::STRING_LITERAL);
+        } else {
             error(fmt::format("Unterminated string literal"));
-            break;
         }
-        emitToken(TokenType::STRING_LITERAL);
         break;
+    }
     }
     // Number
     case '0':
@@ -174,9 +192,34 @@ void Lexer::lexToken() {
             error("Float literals must only contain one decimal point");
         break;
     }
-    default:
-        error(fmt::format("Invalid character '{}'", c));
+    default: {
+        if (isIdentifierStartCharacter(c)) {
+            std::stringstream stream = std::stringstream();
+            stream << c;
+            c = peek();
+            while (isIdentifierCharacter(c)) {
+                stream << c;
+                advance();
+                c = peek();
+            }
+            std::string result = stream.str();
+            if (result == "return")
+                emitToken(TokenType::RETURN);
+            else if (result == "if")
+                emitToken(TokenType::IF);
+            else if (result == "else")
+                emitToken(TokenType::ELSE);
+            else if (result == "while")
+                emitToken(TokenType::WHILE);
+            else if (result == "for")
+                emitToken(TokenType::FOR);
+            else
+                emitToken(TokenType::IDENTIFIER);
+        } else {
+            error(fmt::format("Invalid character '{}'", c));
+        }
         break;
+    }
     }
 }
 

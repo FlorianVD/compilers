@@ -63,12 +63,6 @@ void Lexer::lexToken() {
         break;
 
     case '=':
-        // switch (peek()) {
-        //     case '=':
-        //         emitToken(TokenType::EQUALS_EQUALS);
-        //         advance();
-        //         break;
-        // }
         if (peek() == '=') {
             advance();
             emitToken(TokenType::EQUALS_EQUALS);

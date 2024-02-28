@@ -467,15 +467,14 @@ ast::Ptr<ast::FuncCallExpr> Parser::Implementation::parseFuncCallExpr() {
     return make_shared<FuncCallExpr>(name, arguments);
 }
 
-List<Ptr<Expr>> Parser::Implementation::parseFuncCallArgs()
-{
+List<Ptr<Expr>> Parser::Implementation::parseFuncCallArgs() {
     List<Ptr<Expr>> arguments;
-    
-    while (peek().type != TokenType::RIGHT_PAREN)
-    {
+
+    while (peek().type != TokenType::RIGHT_PAREN) {
         Ptr<Expr> argument = parseExpr();
         arguments.push_back(argument);
-        if (peek().type != TokenType::RIGHT_PAREN) // If not at the end, eat the comma
+        if (peek().type !=
+            TokenType::RIGHT_PAREN) // If not at the end, eat the comma
             eat(TokenType::COMMA);
     }
 

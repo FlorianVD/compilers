@@ -149,6 +149,12 @@ void Lexer::lexToken() {
         while (peeked_char != '"' && peeked_char != '\n' && !isAtEnd()) {
             advance();
             peeked_char = peek();
+            // Supports escape characters
+            if (peeked_char == '\\') {
+                advance();
+                advance();
+                peeked_char = peek();
+            }
         }
         if (peeked_char == '"') {
             advance();

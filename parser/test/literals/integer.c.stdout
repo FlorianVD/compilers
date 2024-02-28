@@ -1,0 +1,5 @@
+└── Program
+    └── FuncDecl: returnType = 'int', name = 'literals'
+        └── CompoundStmt
+            └── VarDecl: type = 'int', name = 'x'
+                └── IntLiteral: value = '42'

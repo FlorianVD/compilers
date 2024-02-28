@@ -1,0 +1,5 @@
+└── Program
+    └── FuncDecl: returnType = 'int', name = 'literals'
+        └── CompoundStmt
+            └── VarDecl: type = 'float', name = 'y'
+                └── FloatLiteral: value = '42.5'

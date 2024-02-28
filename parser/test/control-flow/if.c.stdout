@@ -1,0 +1,18 @@
+└── Program
+    └── FuncDecl: returnType = 'int', name = 'ifs'
+        └── CompoundStmt
+            ├── IfStmt
+            │   ├── BinaryOpExpr: op = '=='
+            │   │   ├── IntLiteral: value = '1'
+            │   │   └── IntLiteral: value = '2'
+            │   └── CompoundStmt
+            │       └── ExprStmt
+            │           └── IntLiteral: value = '42'
+            └── IfStmt
+                ├── BinaryOpExpr: op = '=='
+                │   ├── IntLiteral: value = '1'
+                │   └── IntLiteral: value = '2'
+                ├── ExprStmt
+                │   └── IntLiteral: value = '42'
+                └── ExprStmt
+                    └── IntLiteral: value = '64'

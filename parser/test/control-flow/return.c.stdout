@@ -1,0 +1,8 @@
+└── Program
+    └── FuncDecl: returnType = 'int', name = 'returns'
+        └── CompoundStmt
+            ├── ReturnStmt
+            └── ReturnStmt
+                └── BinaryOpExpr: op = '+'
+                    ├── IntLiteral: value = '1'
+                    └── IntLiteral: value = '2'

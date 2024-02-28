@@ -1,0 +1,15 @@
+└── Program
+    └── FuncDecl: returnType = 'int', name = 'whiles'
+        └── CompoundStmt
+            ├── WhileStmt
+            │   ├── BinaryOpExpr: op = '=='
+            │   │   ├── IntLiteral: value = '1'
+            │   │   └── IntLiteral: value = '2'
+            │   └── CompoundStmt
+            │       └── ExprStmt
+            │           └── IntLiteral: value = '42'
+            └── WhileStmt
+                ├── BinaryOpExpr: op = '=='
+                │   ├── IntLiteral: value = '1'
+                │   └── IntLiteral: value = '2'
+                └── EmptyStmt

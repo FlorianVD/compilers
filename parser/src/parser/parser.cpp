@@ -225,7 +225,18 @@ Ptr<Stmt> Parser::Implementation::parseStmt() {
 
     if (peek().type == TokenType::IDENTIFIER) {
 
-        // No assignment, just a RefExpr
+        /**
+         * For the following code: {
+         *  int var = 4;
+         *  var;
+         * }
+         * We'll have an IDENTIFIER, but no assignment will follow, in this case
+         * we need to just parse the expression and already return it. The
+         * updated grammar for vardeclstmt should thus be:
+         * (IDENTIFIER)? IDENTIFIER ("=" expt)? ";"
+         * and for arrdeclstmt:
+         * (IDENTIFIER)? IDENTIFIER "[" INTEGER "]" ";"
+         */
         if (peekNext().type != TokenType::IDENTIFIER) {
             Ptr<Expr> refExpr = parseExpr();
             eat(TokenType::SEMICOLON);

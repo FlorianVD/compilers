@@ -60,6 +60,10 @@ struct Parser::Implementation {
 
     // ASSIGNMENT: Declare additional parsing functions here.
     ast::Ptr<ast::Expr> parseVarRefExpr();
+    ast::Ptr<ast::FloatLiteral> parseFloatLiteral();
+    ast::Ptr<ast::StringLiteral> parseStringLiteral();
+    ast::Ptr<ast::FuncCallExpr> parseFuncCallExpr();
+    ast::List<Ptr<Expr>> parseFuncCallArgs();
 };
 
 Parser::Parser(const std::vector<Token> &tokens) {
@@ -213,45 +217,58 @@ List<Ptr<VarDecl>> Parser::Implementation::parseFuncDeclArgs() {
 // stmt = "for" "(" forinit expr ";" expr ")" stmt
 //      | exprstmt | vardeclstmt | arrdeclstmt | "{" stmt* "}" | ";"
 // exprstmt = expr ";"
-// vardeclstmt = (IDENTIFIER)* IDENTIFIER ("=" expr)? ";"
-// arrdeclstmt = (IDENTIFIER)* IDENTIFIER "[" INTEGER "]" ";"
+// vardeclstmt = IDENTIFIER IDENTIFIER ("=" expr)? ";"
+// arrdeclstmt = IDENTIFIER IDENTIFIER "[" INTEGER "]" ";"
+// funccallstmt = IDENTIFIER "(" func_call_arguments ")";
 Ptr<Stmt> Parser::Implementation::parseStmt() {
     LLVM_DEBUG(llvm::dbgs() << "In parseStmt()\n");
-    LLVM_DEBUG(llvm::dbgs() << token_type_to_string(peek().type) << "\n");
 
     if (peek().type == TokenType::IDENTIFIER) {
 
         // No assignment, just a RefExpr
         if (peekNext().type != TokenType::IDENTIFIER) {
-            Ptr<Expr> t = parseExpr();
+            Ptr<Expr> refExpr = parseExpr();
             eat(TokenType::SEMICOLON);
-            return make_shared<ExprStmt>(t);
+            return make_shared<ExprStmt>(refExpr);
         }
 
+        Token type_or_name = eat(TokenType::IDENTIFIER);
+
+        // funccallstamt
+        if (peek().type == TokenType::LEFT_PAREN) {
+            Token name = type_or_name;
+            eat(TokenType::LEFT_PAREN);
+            List<Ptr<Expr>> arguments = parseFuncCallArgs();
+            eat(TokenType::RIGHT_PAREN);
+
+            Ptr<Expr> expr = make_shared<FuncCallExpr>(name, arguments);
+            return make_shared<ExprStmt>(expr);
+        }
         // vardeclstmt or arrdeclstmt
-        Token type = eat(TokenType::IDENTIFIER);
-        Token name = eat(TokenType::IDENTIFIER);
+        else {
+            Token type = type_or_name;
+            Token name = eat(TokenType::IDENTIFIER);
+            if (peek().type == TokenType::LEFT_BRACKET) {
+                // arrdeclstmt
+                eat(TokenType::LEFT_BRACKET);
+                Ptr<IntLiteral> size = parseIntLiteral();
+                eat(TokenType::RIGHT_BRACKET);
+                eat(TokenType::SEMICOLON);
 
-        if (peek().type == TokenType::LEFT_BRACKET) {
-            // arrdeclstmt
-            eat(TokenType::LEFT_BRACKET);
-            Ptr<IntLiteral> size = parseIntLiteral();
-            eat(TokenType::RIGHT_BRACKET);
-            eat(TokenType::SEMICOLON);
+                return make_shared<ArrayDecl>(type, name, size);
+            } else {
+                // vardeclstmt
+                Ptr<Expr> init = nullptr;
 
-            return make_shared<ArrayDecl>(type, name, size);
-        } else {
-            // vardeclstmt
-            Ptr<Expr> init = nullptr;
+                if (peek().type == TokenType::EQUALS) {
+                    eat(TokenType::EQUALS);
+                    init = parseExpr();
+                }
 
-            if (peek().type == TokenType::EQUALS) {
-                eat(TokenType::EQUALS);
-                init = parseExpr();
+                eat(TokenType::SEMICOLON);
+
+                return make_shared<VarDecl>(type, name, init);
             }
-
-            eat(TokenType::SEMICOLON);
-
-            return make_shared<VarDecl>(type, name, init);
         }
     }
 
@@ -400,10 +417,18 @@ Ptr<Expr> Parser::Implementation::parseAtom() {
     // ASSIGNMENT: Add additional atoms here.
 
     if (peek().type == TokenType::IDENTIFIER) {
-        LLVM_DEBUG(llvm::dbgs() << "Reference found");
-        // VarRefExpr
         return parseVarRefExpr();
     }
+    if (peek().type == TokenType::FLOAT_LITERAL) {
+        return parseFloatLiteral();
+    }
+    if (peek().type == TokenType::STRING_LITERAL) {
+        return parseStringLiteral();
+    }
+    if (peek().type == TokenType::IDENTIFIER) {
+        return parseFuncCallExpr();
+    }
+
     throw error(fmt::format("Unexpected token type '{}' for atom",
                             token_type_to_string(peek().type)));
 }
@@ -431,4 +456,52 @@ Ptr<Expr> Parser::Implementation::parseVarRefExpr() {
         return make_shared<ArrayRefExpr>(tok, index);
     }
     return make_shared<VarRefExpr>(tok);
+}
+
+// floatLiteral = FLOAT_LITERAL
+Ptr<FloatLiteral> Parser::Implementation::parseFloatLiteral() {
+    LLVM_DEBUG(llvm::dbgs() << "In parseFloatLiteral()\n");
+    Token tok = eat(TokenType::FLOAT_LITERAL);
+    float value = std::stof(tok.lexeme);
+
+    return make_shared<FloatLiteral>(value);
+}
+
+Ptr<StringLiteral> Parser::Implementation::parseStringLiteral() {
+    LLVM_DEBUG(llvm::dbgs() << "In parseStringLiteral()\n");
+    Token tok = eat(TokenType::STRING_LITERAL);
+    std::string value = tok.lexeme;
+    value.erase(0, 1); // Remove first character '"'
+    value.pop_back();  // Remove last character '"'
+
+    return make_shared<StringLiteral>(value);
+}
+
+// function_call = IDENTIFIER "(" function_call_args? ")"
+ast::Ptr<ast::FuncCallExpr> Parser::Implementation::parseFuncCallExpr() {
+    LLVM_DEBUG(llvm::dbgs() << "In parseFuncCallExpr()\n");
+
+    // Name
+    Token name = eat(TokenType::IDENTIFIER);
+
+    // Arguments
+    eat(TokenType::LEFT_PAREN);
+    List<Ptr<Expr>> arguments = parseFuncCallArgs();
+    eat(TokenType::RIGHT_PAREN);
+
+    return make_shared<FuncCallExpr>(name, arguments);
+}
+
+List<Ptr<Expr>> Parser::Implementation::parseFuncCallArgs() {
+    List<Ptr<Expr>> arguments;
+
+    while (peek().type != TokenType::RIGHT_PAREN) {
+        Ptr<Expr> argument = parseExpr();
+        arguments.push_back(argument);
+        if (peek().type !=
+            TokenType::RIGHT_PAREN) // If not at the end, eat the comma
+            eat(TokenType::COMMA);
+    }
+
+    return arguments;
 }

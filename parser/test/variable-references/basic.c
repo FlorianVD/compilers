@@ -1,5 +1,4 @@
-int varrefs()
-{
+int varrefs() {
     int var = 4;
     int arr[4];
 

@@ -59,10 +59,10 @@ struct Parser::Implementation {
     ast::Ptr<ast::IntLiteral> parseIntLiteral();
 
     // ASSIGNMENT: Declare additional parsing functions here.
-    ast::Ptr<ast::Expr> parseVarRefExpr();
+    ast::Ptr<ast::Expr> parseVarRefExpr(Token name);
     ast::Ptr<ast::FloatLiteral> parseFloatLiteral();
     ast::Ptr<ast::StringLiteral> parseStringLiteral();
-    ast::Ptr<ast::FuncCallExpr> parseFuncCallExpr();
+    ast::Ptr<ast::FuncCallExpr> parseFuncCallExpr(Token name);
     ast::List<Ptr<Expr>> parseFuncCallArgs();
 };
 
@@ -428,16 +428,17 @@ Ptr<Expr> Parser::Implementation::parseAtom() {
     // ASSIGNMENT: Add additional atoms here.
 
     if (peek().type == TokenType::IDENTIFIER) {
-        return parseVarRefExpr();
+        Token name = eat(TokenType::IDENTIFIER);
+        if (peek().type == TokenType::LEFT_PAREN)
+            return parseFuncCallExpr(name);
+        else
+            return parseVarRefExpr(name);
     }
     if (peek().type == TokenType::FLOAT_LITERAL) {
         return parseFloatLiteral();
     }
     if (peek().type == TokenType::STRING_LITERAL) {
         return parseStringLiteral();
-    }
-    if (peek().type == TokenType::IDENTIFIER) {
-        return parseFuncCallExpr();
     }
 
     throw error(fmt::format("Unexpected token type '{}' for atom",
@@ -455,18 +456,18 @@ Ptr<IntLiteral> Parser::Implementation::parseIntLiteral() {
 }
 
 // ASSIGNMENT: Define additional parsing functions here.
-Ptr<Expr> Parser::Implementation::parseVarRefExpr() {
+Ptr<Expr> Parser::Implementation::parseVarRefExpr(Token name) {
     LLVM_DEBUG(llvm::dbgs() << "In parseVarRefExpr()\n");
-    Token tok = eat(TokenType::IDENTIFIER);
+    
     if (peek().type == TokenType::LEFT_BRACKET) {
         eat(TokenType::LEFT_BRACKET);
         Ptr<Expr> index =
             parseIntLiteral(); // FIXME: This should parse an expression since
                                // this could be a function call as well
         eat(TokenType::RIGHT_BRACKET);
-        return make_shared<ArrayRefExpr>(tok, index);
+        return make_shared<ArrayRefExpr>(name, index);
     }
-    return make_shared<VarRefExpr>(tok);
+    return make_shared<VarRefExpr>(name);
 }
 
 // floatLiteral = FLOAT_LITERAL
@@ -489,11 +490,8 @@ Ptr<StringLiteral> Parser::Implementation::parseStringLiteral() {
 }
 
 // function_call = IDENTIFIER "(" function_call_args? ")"
-ast::Ptr<ast::FuncCallExpr> Parser::Implementation::parseFuncCallExpr() {
+ast::Ptr<ast::FuncCallExpr> Parser::Implementation::parseFuncCallExpr(Token name) {
     LLVM_DEBUG(llvm::dbgs() << "In parseFuncCallExpr()\n");
-
-    // Name
-    Token name = eat(TokenType::IDENTIFIER);
 
     // Arguments
     eat(TokenType::LEFT_PAREN);

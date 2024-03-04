@@ -64,6 +64,13 @@ struct Parser::Implementation {
     ast::Ptr<ast::StringLiteral> parseStringLiteral();
     ast::Ptr<ast::FuncCallExpr> parseFuncCallExpr(Token name);
     ast::List<Ptr<Expr>> parseFuncCallArgs();
+    ast::Ptr<ast::Expr> parseAssignment();
+    ast::Ptr<ast::Expr> parseEquality();
+    ast::Ptr<ast::Expr> parseComparison();
+    ast::Ptr<ast::Expr> parseAditive();
+    ast::Ptr<ast::Expr> parseMultiplicative();
+    ast::Ptr<ast::Expr> parseUnary();
+    ast::Ptr<ast::Expr> parseExponent();
 };
 
 Parser::Parser(const std::vector<Token> &tokens) {
@@ -343,6 +350,7 @@ Ptr<Stmt> Parser::Implementation::parseStmt() {
 
     // exprstmt
     Ptr<Expr> expr = parseExpr();
+    LLVM_DEBUG(llvm::dbgs() << "Hier zijn we\n");
     eat(TokenType::SEMICOLON);
 
     return make_shared<ExprStmt>(expr);
@@ -404,7 +412,7 @@ Ptr<CompoundStmt> Parser::Implementation::parseCompoundStmt() {
 Ptr<Expr> Parser::Implementation::parseExpr() {
     LLVM_DEBUG(llvm::dbgs() << "In parseExpr()\n");
 
-    return parseAtom();
+    return parseAssignment();
 }
 
 // atom = INTEGER | '(' expr ')'
@@ -458,12 +466,10 @@ Ptr<IntLiteral> Parser::Implementation::parseIntLiteral() {
 // ASSIGNMENT: Define additional parsing functions here.
 Ptr<Expr> Parser::Implementation::parseVarRefExpr(Token name) {
     LLVM_DEBUG(llvm::dbgs() << "In parseVarRefExpr()\n");
-    
+
     if (peek().type == TokenType::LEFT_BRACKET) {
         eat(TokenType::LEFT_BRACKET);
-        Ptr<Expr> index =
-            parseIntLiteral(); // FIXME: This should parse an expression since
-                               // this could be a function call as well
+        Ptr<Expr> index = parseExpr();
         eat(TokenType::RIGHT_BRACKET);
         return make_shared<ArrayRefExpr>(name, index);
     }
@@ -490,7 +496,8 @@ Ptr<StringLiteral> Parser::Implementation::parseStringLiteral() {
 }
 
 // function_call = IDENTIFIER "(" function_call_args? ")"
-ast::Ptr<ast::FuncCallExpr> Parser::Implementation::parseFuncCallExpr(Token name) {
+ast::Ptr<ast::FuncCallExpr>
+Parser::Implementation::parseFuncCallExpr(Token name) {
     LLVM_DEBUG(llvm::dbgs() << "In parseFuncCallExpr()\n");
 
     // Arguments
@@ -513,4 +520,117 @@ List<Ptr<Expr>> Parser::Implementation::parseFuncCallArgs() {
     }
 
     return arguments;
+}
+
+ast::Ptr<ast::Expr> Parser::Implementation::parseAssignment() {
+    LLVM_DEBUG(llvm::dbgs() << "In parseAssignment\n");
+
+    auto leftOperand = parseEquality();
+    if (peek().type == TokenType::EQUALS) {
+        Token tok = eat(TokenType::EQUALS);
+        auto rightOperand = parseAssignment();
+        return make_shared<BinaryOpExpr>(leftOperand, tok, rightOperand);
+    }
+    LLVM_DEBUG(llvm::dbgs() << "Hier zijnjksksdhfkdsg we\n");
+
+    return leftOperand;
+}
+
+ast::Ptr<ast::Expr> Parser::Implementation::parseEquality() {
+    LLVM_DEBUG(llvm::dbgs() << "In parseEquality\n");
+
+    auto leftOperator = parseComparison();
+    if (peek().type == TokenType::EQUALS_EQUALS ||
+        peek().type == TokenType::BANG_EQUALS) {
+        Token tok = peek();
+        advance();
+        LLVM_DEBUG(llvm::dbgs() << "Hiersjngkdjgfb we\n");
+
+        auto rightOperator = parseComparison();
+        if (peek().type == TokenType::EQUALS_EQUALS ||
+            peek().type == TokenType::BANG_EQUALS) {
+            throw error("non-associative operators may not be used multiple "
+                        "times in a row");
+        }
+        return make_shared<BinaryOpExpr>(leftOperator, tok, rightOperator);
+    }
+
+    return leftOperator;
+}
+ast::Ptr<ast::Expr> Parser::Implementation::parseComparison() {
+    LLVM_DEBUG(llvm::dbgs() << "In parseComparison\n");
+
+    auto leftOperator = parseAditive();
+    if (peek().type == TokenType::LESS_THAN ||
+        peek().type == TokenType::LESS_THAN_EQUALS ||
+        peek().type == TokenType::GREATER_THAN ||
+        peek().type == TokenType::GREATER_THAN_EQUALS) {
+        Token tok = peek();
+        advance();
+        auto rightOperator = parseAditive();
+        if (peek().type == TokenType::LESS_THAN ||
+            peek().type == TokenType::LESS_THAN_EQUALS ||
+            peek().type == TokenType::GREATER_THAN ||
+            peek().type == TokenType::GREATER_THAN_EQUALS) {
+            throw error("non-associative operators may not be used multiple "
+                        "times in a row");
+        }
+        return make_shared<BinaryOpExpr>(leftOperator, tok, rightOperator);
+    }
+    return leftOperator;
+}
+ast::Ptr<ast::Expr> Parser::Implementation::parseAditive() {
+    LLVM_DEBUG(llvm::dbgs() << "In parseAditive\n");
+
+    auto leftOperator = parseMultiplicative();
+    while (peek().type == TokenType::PLUS || peek().type == TokenType::MINUS) {
+        Token tok = peek();
+        advance();
+        auto rightOperator = parseMultiplicative();
+        leftOperator =
+            make_shared<BinaryOpExpr>(leftOperator, tok, rightOperator);
+    }
+    return leftOperator;
+}
+ast::Ptr<ast::Expr> Parser::Implementation::parseMultiplicative() {
+    LLVM_DEBUG(llvm::dbgs() << "In parseMultiplicative\n");
+
+    auto leftOperator = parseUnary();
+    while (peek().type == TokenType::STAR || peek().type == TokenType::SLASH ||
+           peek().type == TokenType::PERCENT) {
+        Token tok = peek();
+        advance();
+        auto rightOperator = parseUnary();
+        leftOperator =
+            make_shared<BinaryOpExpr>(leftOperator, tok, rightOperator);
+    }
+    return leftOperator;
+}
+ast::Ptr<ast::Expr> Parser::Implementation::parseUnary() {
+    LLVM_DEBUG(llvm::dbgs() << "In parseUnary\n");
+    if (peek().type == TokenType::MINUS) {
+        Token tok = eat(TokenType::MINUS);
+        auto rightOperator = parseUnary();
+        return make_shared<UnaryOpExpr>(tok, rightOperator);
+    } else if (peek().type == TokenType::PLUS) {
+        Token tok = eat(TokenType::PLUS);
+        auto rightOperator = parseUnary();
+        return make_shared<UnaryOpExpr>(tok, rightOperator);
+    } else {
+        return parseExponent();
+    }
+}
+ast::Ptr<ast::Expr> Parser::Implementation::parseExponent() {
+    LLVM_DEBUG(llvm::dbgs() << "In parseExponent\n");
+    auto leftOperator = parseAtom();
+    LLVM_DEBUG(llvm::dbgs()
+               << "Next token: " << token_type_to_string(peek().type) << "\n");
+
+    if (peek().type == TokenType::CARET) {
+        Token tok = eat(TokenType::CARET);
+        auto rightOperator = parseExponent();
+        return make_shared<BinaryOpExpr>(leftOperator, tok, rightOperator);
+    }
+
+    return leftOperator;
 }

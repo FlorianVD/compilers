@@ -71,6 +71,7 @@ struct Parser::Implementation {
     ast::Ptr<ast::Expr> parseMultiplicative();
     ast::Ptr<ast::Expr> parseUnary();
     ast::Ptr<ast::Expr> parseExponent();
+    ast::Ptr<ast::IfStmt> parseConditional();
 };
 
 Parser::Parser(const std::vector<Token> &tokens) {
@@ -348,9 +349,12 @@ Ptr<Stmt> Parser::Implementation::parseStmt() {
 
     // ASSIGNMENT: Add additional statements here
 
+    if (peek().type == TokenType::IF) {
+        return parseConditional();
+    }
+
     // exprstmt
     Ptr<Expr> expr = parseExpr();
-    LLVM_DEBUG(llvm::dbgs() << "Hier zijn we\n");
     eat(TokenType::SEMICOLON);
 
     return make_shared<ExprStmt>(expr);
@@ -531,7 +535,6 @@ ast::Ptr<ast::Expr> Parser::Implementation::parseAssignment() {
         auto rightOperand = parseAssignment();
         return make_shared<BinaryOpExpr>(leftOperand, tok, rightOperand);
     }
-    LLVM_DEBUG(llvm::dbgs() << "Hier zijnjksksdhfkdsg we\n");
 
     return leftOperand;
 }
@@ -544,7 +547,6 @@ ast::Ptr<ast::Expr> Parser::Implementation::parseEquality() {
         peek().type == TokenType::BANG_EQUALS) {
         Token tok = peek();
         advance();
-        LLVM_DEBUG(llvm::dbgs() << "Hiersjngkdjgfb we\n");
 
         auto rightOperator = parseComparison();
         if (peek().type == TokenType::EQUALS_EQUALS ||
@@ -623,8 +625,6 @@ ast::Ptr<ast::Expr> Parser::Implementation::parseUnary() {
 ast::Ptr<ast::Expr> Parser::Implementation::parseExponent() {
     LLVM_DEBUG(llvm::dbgs() << "In parseExponent\n");
     auto leftOperator = parseAtom();
-    LLVM_DEBUG(llvm::dbgs()
-               << "Next token: " << token_type_to_string(peek().type) << "\n");
 
     if (peek().type == TokenType::CARET) {
         Token tok = eat(TokenType::CARET);
@@ -633,4 +633,31 @@ ast::Ptr<ast::Expr> Parser::Implementation::parseExponent() {
     }
 
     return leftOperator;
+}
+
+ast::Ptr<ast::IfStmt> Parser::Implementation::parseConditional() {
+    LLVM_DEBUG(llvm::dbgs() << "In parseCondition\n");
+    eat(TokenType::IF);
+    eat(TokenType::LEFT_PAREN);
+    auto cond = parseExpr();
+    eat(TokenType::RIGHT_PAREN);
+
+    Ptr<Stmt> ifStmt = nullptr;
+    if (peek().type == TokenType::LEFT_BRACE) {
+        ifStmt = parseCompoundStmt();
+    } else {
+        ifStmt = parseStmt();
+    }
+
+    Ptr<Stmt> elseStmt = nullptr;
+    if (peek().type == TokenType::ELSE) {
+        LLVM_DEBUG(llvm::dbgs() << "In parseElse\n");
+        eat(TokenType::ELSE);
+        if (peek().type == TokenType::LEFT_BRACE) {
+            elseStmt = parseCompoundStmt();
+        } else {
+            elseStmt = parseStmt();
+        }
+    }
+    return make_shared<IfStmt>(cond, ifStmt, elseStmt);
 }

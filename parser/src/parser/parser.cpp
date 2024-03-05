@@ -59,10 +59,10 @@ struct Parser::Implementation {
     ast::Ptr<ast::IntLiteral> parseIntLiteral();
 
     // ASSIGNMENT: Declare additional parsing functions here.
-    ast::Ptr<ast::Expr> parseVarRefExpr(Token name);
+    ast::Ptr<ast::Expr> parseVarRefExpr();
     ast::Ptr<ast::FloatLiteral> parseFloatLiteral();
     ast::Ptr<ast::StringLiteral> parseStringLiteral();
-    ast::Ptr<ast::FuncCallExpr> parseFuncCallExpr(Token name);
+    ast::Ptr<ast::FuncCallExpr> parseFuncCallExpr();
     ast::List<Ptr<Expr>> parseFuncCallArgs();
     ast::Ptr<ast::Expr> parseAssignment();
     ast::Ptr<ast::Expr> parseEquality();
@@ -450,11 +450,10 @@ Ptr<Expr> Parser::Implementation::parseAtom() {
     // ASSIGNMENT: Add additional atoms here.
 
     if (peek().type == TokenType::IDENTIFIER) {
-        Token name = eat(TokenType::IDENTIFIER);
-        if (peek().type == TokenType::LEFT_PAREN)
-            return parseFuncCallExpr(name);
+        if (peekNext().type == TokenType::LEFT_PAREN)
+            return parseFuncCallExpr();
         else
-            return parseVarRefExpr(name);
+            return parseVarRefExpr();
     }
     if (peek().type == TokenType::FLOAT_LITERAL) {
         return parseFloatLiteral();
@@ -478,8 +477,10 @@ Ptr<IntLiteral> Parser::Implementation::parseIntLiteral() {
 }
 
 // ASSIGNMENT: Define additional parsing functions here.
-Ptr<Expr> Parser::Implementation::parseVarRefExpr(Token name) {
+Ptr<Expr> Parser::Implementation::parseVarRefExpr() {
     LLVM_DEBUG(llvm::dbgs() << "In parseVarRefExpr()\n");
+
+    Token name = eat(TokenType::IDENTIFIER);
 
     if (peek().type == TokenType::LEFT_BRACKET) {
         eat(TokenType::LEFT_BRACKET);
@@ -510,9 +511,10 @@ Ptr<StringLiteral> Parser::Implementation::parseStringLiteral() {
 }
 
 // function_call = IDENTIFIER "(" function_call_args? ")"
-ast::Ptr<ast::FuncCallExpr>
-Parser::Implementation::parseFuncCallExpr(Token name) {
+ast::Ptr<ast::FuncCallExpr> Parser::Implementation::parseFuncCallExpr() {
     LLVM_DEBUG(llvm::dbgs() << "In parseFuncCallExpr()\n");
+
+    Token name = eat(TokenType::IDENTIFIER);
 
     // Arguments
     eat(TokenType::LEFT_PAREN);
@@ -525,12 +527,20 @@ Parser::Implementation::parseFuncCallExpr(Token name) {
 List<Ptr<Expr>> Parser::Implementation::parseFuncCallArgs() {
     List<Ptr<Expr>> arguments;
 
-    while (peek().type != TokenType::RIGHT_PAREN) {
+    // If no arguments, return immediately
+    if (peek().type == TokenType::RIGHT_PAREN) {
+        return arguments;
+    }
+
+    // Eat the first argument
+    Ptr<Expr> arg0 = parseExpr();
+    arguments.push_back(arg0);
+
+    // Check for remaining arguments
+    while (peek().type == TokenType::COMMA) {
+        eat(TokenType::COMMA);
         Ptr<Expr> argument = parseExpr();
         arguments.push_back(argument);
-        if (peek().type !=
-            TokenType::RIGHT_PAREN) // If not at the end, eat the comma
-            eat(TokenType::COMMA);
     }
 
     return arguments;

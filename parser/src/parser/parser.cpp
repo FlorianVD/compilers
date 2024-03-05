@@ -72,6 +72,7 @@ struct Parser::Implementation {
     ast::Ptr<ast::Expr> parseUnary();
     ast::Ptr<ast::Expr> parseExponent();
     ast::Ptr<ast::IfStmt> parseConditional();
+    ast::Ptr<ast::WhileStmt> parseWhile();
 };
 
 Parser::Parser(const std::vector<Token> &tokens) {
@@ -351,6 +352,10 @@ Ptr<Stmt> Parser::Implementation::parseStmt() {
 
     if (peek().type == TokenType::IF) {
         return parseConditional();
+    }
+
+    if (peek().type == TokenType::WHILE) {
+        return parseWhile();
     }
 
     // exprstmt
@@ -660,4 +665,20 @@ ast::Ptr<ast::IfStmt> Parser::Implementation::parseConditional() {
         }
     }
     return make_shared<IfStmt>(cond, ifStmt, elseStmt);
+}
+
+ast::Ptr<ast::WhileStmt> Parser::Implementation::parseWhile() {
+    LLVM_DEBUG(llvm::dbgs() << "In parseWhile\n");
+    eat(TokenType::WHILE);
+    eat(TokenType::LEFT_PAREN);
+    auto cond = parseExpr();
+    eat(TokenType::RIGHT_PAREN);
+    Ptr<Stmt> body = nullptr;
+    if (peek().type == TokenType::LEFT_BRACE) {
+        body = parseCompoundStmt();
+    } else {
+        body = parseStmt();
+    }
+
+    return make_shared<WhileStmt>(cond, body);
 }

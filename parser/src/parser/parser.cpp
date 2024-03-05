@@ -73,6 +73,7 @@ struct Parser::Implementation {
     ast::Ptr<ast::Expr> parseExponent();
     ast::Ptr<ast::IfStmt> parseConditional();
     ast::Ptr<ast::WhileStmt> parseWhile();
+    ast::Ptr<ast::ReturnStmt> parseReturn();
 };
 
 Parser::Parser(const std::vector<Token> &tokens) {
@@ -356,6 +357,10 @@ Ptr<Stmt> Parser::Implementation::parseStmt() {
 
     if (peek().type == TokenType::WHILE) {
         return parseWhile();
+    }
+
+    if (peek().type == TokenType::RETURN) {
+        return parseReturn();
     }
 
     // exprstmt
@@ -681,4 +686,16 @@ ast::Ptr<ast::WhileStmt> Parser::Implementation::parseWhile() {
     }
 
     return make_shared<WhileStmt>(cond, body);
+}
+
+ast::Ptr<ast::ReturnStmt> Parser::Implementation::parseReturn() {
+    LLVM_DEBUG(llvm::dbgs() << "In parseReturn\n");
+    eat(TokenType::RETURN);
+    Ptr<Expr> expr = nullptr;
+    if (peek().type != TokenType::SEMICOLON) {
+        expr = parseExpr();
+    }
+
+    eat(TokenType::SEMICOLON);
+    return make_shared<ReturnStmt>(expr);
 }

@@ -1,0 +1,5 @@
+└── Program <4>
+    ├── FuncDecl: returnType = 'int', name = 'foo' <1>
+    │   └── CompoundStmt <0>
+    └── FuncDecl: returnType = 'int', name = 'foo' <3>
+        └── CompoundStmt <2>

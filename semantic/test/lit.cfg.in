@@ -1,0 +1,27 @@
+import sys
+sys.path.append('@TEST_SOURCE_ROOT@')
+import CustomTestFormat
+
+# The name of the test suite, for use in reports and diagnostics.
+config.name = 'microcc'
+
+# The test format object which will be used to discover and run tests in the test suite.
+config.test_format = CustomTestFormat.CustomTestFormat()
+
+# The filesystem path to the test suite root. This is the directory that will be scanned for tests.
+config.test_source_root = '@TEST_SOURCE_ROOT@'
+
+# The path to the test suite root inside the object directory. This is where tests will be run and temporary output files placed.
+config.test_exec_root = '@CMAKE_BINARY_DIR@/test/'
+
+# Timeout per test.
+lit_config.maxIndividualTestTime = 1
+
+# Suffixes used to identify test files.
+config.suffixes = ['.c']
+
+# Substitutions to perform.
+config.substitutions.append(('%microcc', '@CMAKE_BINARY_DIR@/microcc'))
+config.substitutions.append(('%diff-command-output.sh', '@TEST_SOURCE_ROOT@/diff-command-output.sh'))
+config.substitutions.append((' FileCheck ', ' @FILECHECK@ -dump-input-filter=all -vv -color '))
+config.substitutions.append((' not ', ' @LLVM_NOT@ '))

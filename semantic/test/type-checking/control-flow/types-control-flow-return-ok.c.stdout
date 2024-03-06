@@ -1,0 +1,10 @@
+└── Program <7>
+    ├── FuncDecl: returnType = 'int', name = 'foo' <3>
+    │   └── CompoundStmt <2>
+    │       └── ReturnStmt <1>
+    │           └── IntLiteral: value = '2' <0>
+    └── FuncDecl: returnType = 'void', name = 'bar' <6>
+        └── CompoundStmt <5>
+            └── ReturnStmt <4>
+Type table:
+0                   i64

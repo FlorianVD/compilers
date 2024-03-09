@@ -59,7 +59,7 @@ struct sema::TypeCheckingPass::Implementation {
     llvm::Type *T_string; // LLVM's i8* type
 
     // ASSIGNMENT: Add any helper functions you need here.
-    llvm::Type *getType(ast::Expr *node);
+    llvm::Type *getType(ast::Base *node);
 };
 
 sema::TypeCheckingPass::TypeCheckingPass(llvm::LLVMContext &ctx) {
@@ -185,11 +185,19 @@ sema::TypeCheckingPass::Implementation::visitReturnStmt(ast::ReturnStmt &node) {
 
 llvm::Type *
 sema::TypeCheckingPass::Implementation::visitVarDecl(ast::VarDecl &node) {
-    // ASSIGNMENT: Implement type checking for variable declarations here.
     if (node.init)
         visit(*node.init);
 
-    return type_table[&node] = nullptr;
+    llvm::Type * varType = Util::parseLLVMType(ctx, node.type);
+    if (node.init) {
+        llvm::Type *initType = getType(node.init.get());
+
+        if (varType != initType) {
+            throw SemanticException("Type of initializer does not match type of variable", node.name.begin);
+        }
+    }
+
+    return type_table[&node] = varType;
 }
 
 llvm::Type *
@@ -300,16 +308,34 @@ llvm::Type *sema::TypeCheckingPass::Implementation::visitStringLiteral(
 
 llvm::Type *
 sema::TypeCheckingPass::Implementation::visitVarRefExpr(ast::VarRefExpr &node) {
-    // ASSIGNMENT: Implement type checking for variable references here.
-    return type_table[&node] = nullptr;
+    // Find the referenced symbol
+    auto it = symbol_table.find(&node);
+    if(it == symbol_table.end()) {
+        throw SemanticException("Could not find symbol");
+    }
+
+    ast::Base * ref = it->second;
+    llvm::Type * refType = getType(ref);
+    
+    return type_table[&node] = refType;
 }
 
 llvm::Type *sema::TypeCheckingPass::Implementation::visitArrayRefExpr(
     ast::ArrayRefExpr &node) {
-    // ASSIGNMENT: Implement type checking for array references here.
     visit(*node.index);
 
-    return type_table[&node] = nullptr;
+    if(getType(node.index.get()) != T_int) {
+        throw SemanticException("Array subscript must be an integer", node.name.begin);
+    }
+
+    auto it = symbol_table.find(&node);
+    if (it == symbol_table.end()) {
+        throw SemanticException("Could not find symbol");
+    }
+    ast::Base * ref = it->second;
+    llvm::Type * refType = getType(ref);
+
+    return type_table[&node] = refType->getArrayElementType();
 }
 
 llvm::Type *sema::TypeCheckingPass::Implementation::visitFuncCallExpr(
@@ -354,7 +380,7 @@ llvm::Type *sema::TypeCheckingPass::Implementation::visitFuncCallExpr(
     return type_table[&node] = funcTy->getReturnType();
 }
 
-llvm::Type *sema::TypeCheckingPass::Implementation::getType(ast::Expr *node) {
+llvm::Type *sema::TypeCheckingPass::Implementation::getType(ast::Base *node) {
     auto it = type_table.find(node);
     if (it == type_table.end()) {
         throw SemanticException(fmt::format("Could not find type"));

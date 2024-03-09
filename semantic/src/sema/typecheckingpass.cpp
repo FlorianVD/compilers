@@ -273,11 +273,7 @@ llvm::Type *sema::TypeCheckingPass::Implementation::visitUnaryOpExpr(
 
     bool t = operandType == T_int;
 
-    LLVM_DEBUG(llvm::dbgs()
-               << "operand type " << Util::llvm_type_to_string(operandType)
-               << " " << t);
-
-    if (operandType != T_int || operandType != T_float) {
+    if (operandType != T_int && operandType != T_float) {
         throw SemanticException(
             fmt::format("Invalid operand type to unary operator '{}'",
                         node.op.lexeme),

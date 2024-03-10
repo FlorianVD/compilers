@@ -60,6 +60,7 @@ struct sema::TypeCheckingPass::Implementation {
 
     // ASSIGNMENT: Add any helper functions you need here.
     llvm::Type *getType(ast::Base *node);
+    ast::Base *getSymbol(ast::Base *node);
 };
 
 sema::TypeCheckingPass::TypeCheckingPass(llvm::LLVMContext &ctx) {
@@ -155,30 +156,37 @@ sema::TypeCheckingPass::Implementation::visitFuncDecl(ast::FuncDecl &node) {
 
 llvm::Type *
 sema::TypeCheckingPass::Implementation::visitIfStmt(ast::IfStmt &node) {
-    // ASSIGNMENT: Implement type checking for if statements here.
     visit(*node.condition);
     visit(*node.if_clause);
     if (node.else_clause)
         visit(*node.else_clause);
+
+    if (getType(node.condition.get()) != T_int) {
+        throw SemanticException(
+            "Condition for an if statement must be an integer");
+    }
 
     return nullptr; // Statements do not have a type.
 }
 
 llvm::Type *
 sema::TypeCheckingPass::Implementation::visitWhileStmt(ast::WhileStmt &node) {
-    // ASSIGNMENT: Implement type checking for while statements here.
     visit(*node.condition);
     visit(*node.body);
+
+    if (getType(node.condition.get()) != T_int) {
+        throw SemanticException(
+            "Condition for a while statement must be an integer");
+    }
 
     return nullptr; // Statements do not have a type.
 }
 
 llvm::Type *
 sema::TypeCheckingPass::Implementation::visitReturnStmt(ast::ReturnStmt &node) {
-    // ASSIGNMENT: Implement type checking for return statements here.
-
-    if (node.value)
+    if (node.value) {
         visit(*node.value);
+    }
 
     return nullptr; // Statements do not have a type.
 }
@@ -188,12 +196,14 @@ sema::TypeCheckingPass::Implementation::visitVarDecl(ast::VarDecl &node) {
     if (node.init)
         visit(*node.init);
 
-    llvm::Type * varType = Util::parseLLVMType(ctx, node.type);
+    llvm::Type *varType = Util::parseLLVMType(ctx, node.type);
     if (node.init) {
         llvm::Type *initType = getType(node.init.get());
 
         if (varType != initType) {
-            throw SemanticException("Type of initializer does not match type of variable", node.name.begin);
+            throw SemanticException(
+                "Type of initializer does not match type of variable",
+                node.name.begin);
         }
     }
 
@@ -309,14 +319,9 @@ llvm::Type *sema::TypeCheckingPass::Implementation::visitStringLiteral(
 llvm::Type *
 sema::TypeCheckingPass::Implementation::visitVarRefExpr(ast::VarRefExpr &node) {
     // Find the referenced symbol
-    auto it = symbol_table.find(&node);
-    if(it == symbol_table.end()) {
-        throw SemanticException("Could not find symbol");
-    }
+    ast::Base *ref = getSymbol(&node);
+    llvm::Type *refType = getType(ref);
 
-    ast::Base * ref = it->second;
-    llvm::Type * refType = getType(ref);
-    
     return type_table[&node] = refType;
 }
 
@@ -324,16 +329,13 @@ llvm::Type *sema::TypeCheckingPass::Implementation::visitArrayRefExpr(
     ast::ArrayRefExpr &node) {
     visit(*node.index);
 
-    if(getType(node.index.get()) != T_int) {
-        throw SemanticException("Array subscript must be an integer", node.name.begin);
+    if (getType(node.index.get()) != T_int) {
+        throw SemanticException("Array subscript must be an integer",
+                                node.name.begin);
     }
 
-    auto it = symbol_table.find(&node);
-    if (it == symbol_table.end()) {
-        throw SemanticException("Could not find symbol");
-    }
-    ast::Base * ref = it->second;
-    llvm::Type * refType = getType(ref);
+    ast::Base *ref = getSymbol(&node);
+    llvm::Type *refType = getType(ref);
 
     return type_table[&node] = refType->getArrayElementType();
 }
@@ -388,4 +390,14 @@ llvm::Type *sema::TypeCheckingPass::Implementation::getType(ast::Base *node) {
 
     llvm::Type *operandType = it->second;
     return operandType;
+}
+
+ast::Base *sema::TypeCheckingPass::Implementation::getSymbol(ast::Base *node) {
+    auto it = symbol_table.find(node);
+    if (it == symbol_table.end()) {
+        throw SemanticException("Could not find symbol");
+    }
+
+    ast::Base *ref = it->second;
+    return ref;
 }

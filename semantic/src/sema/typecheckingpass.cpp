@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <fmt/core.h>
+#include <stack>
 
 #define DEBUG_TYPE "typecheckingpass"
 
@@ -24,6 +25,8 @@ struct sema::TypeCheckingPass::Implementation {
     }
 
     TypeCheckingPass *parent;
+
+    std::stack<ast::FuncDecl *> return_table;
 
     llvm::Type *visit(ast::Base &node);
     llvm::Type *visitFuncDecl(ast::FuncDecl &node);
@@ -141,14 +144,19 @@ llvm::Type *sema::TypeCheckingPass::visitFuncCallExpr(ast::FuncCallExpr &node) {
 }
 
 llvm::Type *sema::TypeCheckingPass::Implementation::visit(ast::Base &node) {
+    LLVM_DEBUG(llvm::dbgs() << "in visit\n");
     return parent->visit(node);
 }
 
 llvm::Type *
 sema::TypeCheckingPass::Implementation::visitFuncDecl(ast::FuncDecl &node) {
+    LLVM_DEBUG(llvm::dbgs() << "in functionDecl\n");
 
+    return_table.push(&node);
     for (const auto &arg : node.arguments)
         visit(*arg);
+
+    LLVM_DEBUG(llvm::dbgs() << "visiting body\n");
     visit(*node.body);
 
     return nullptr; // No need to return anything here.
@@ -184,10 +192,24 @@ sema::TypeCheckingPass::Implementation::visitWhileStmt(ast::WhileStmt &node) {
 
 llvm::Type *
 sema::TypeCheckingPass::Implementation::visitReturnStmt(ast::ReturnStmt &node) {
+    LLVM_DEBUG(llvm::dbgs() << "in returnStmt\n");
+    ast::FuncDecl *func = return_table.top();
+
+    LLVM_DEBUG(llvm::dbgs() << "Function " << func->name.lexeme << "\n");
+
+    llvm::Type *funcRetType = Util::parseLLVMType(ctx, func->returnType);
+
+    llvm::Type *retValType = T_void;
     if (node.value) {
         visit(*node.value);
+        retValType = getType(node.value.get());
     }
 
+    return_table.pop();
+    if (funcRetType != retValType) {
+        throw SemanticException(
+            "Type of return statement does not match function return type");
+    }
     return nullptr; // Statements do not have a type.
 }
 
@@ -351,6 +373,8 @@ llvm::Type *sema::TypeCheckingPass::Implementation::visitFuncCallExpr(
             node.name.begin);
 
     llvm::FunctionType *funcTy = llvm::cast<llvm::FunctionType>(it->second);
+
+    LLVM_DEBUG(llvm::dbgs() << "in functionCallExpr\n");
 
     // Check if the number of arguments matches
     const unsigned int expectedParamSize = funcTy->getNumParams();

@@ -301,8 +301,7 @@ void codegen_x64::CodeGeneratorX64::visitFuncCallExpr(ast::FuncCallExpr &node) {
         "call", {node.name.lexeme}, "Some optional comment here"};
 
     // Clear remaining arguments
-    for (std::size_t i = abi_param_regs.size(); i < node.arguments.size();
-         i++) {
+    for (std::size_t i = abi_param_regs.size(); i < node.arguments.size(); i++) {
         module << Instruction{"popq", {abi_param_regs[0]}, "Clear arg"};
     }
     // Push result

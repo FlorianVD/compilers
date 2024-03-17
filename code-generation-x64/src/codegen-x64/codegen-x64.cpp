@@ -101,6 +101,91 @@ void codegen_x64::CodeGeneratorX64::visitArrayDecl(ast::ArrayDecl &node) {
     visit(*node.size);
 }
 
+namespace codegen_x64 {
+
+void binaryOpExprPlus(Module &module,
+                      const std::array<std::string, 6U> param_regs) {
+    module << Instruction{"popq", {param_regs[1]}, "[Plus] Load 1st operand"};
+    module << Instruction{"popq", {param_regs[0]}, "[Plus] Load 2nd operand"};
+    module << Instruction{"addq", {param_regs[1], param_regs[0]}, "[Plus] Add"};
+    module << Instruction{"pushq", {param_regs[0]}, "[Plus] Push result"};
+}
+
+void binaryOpExprSubtract(Module &module,
+                          const std::array<std::string, 6U> param_regs) {
+    module << Instruction{"popq", {param_regs[1]}, "[Sub] Load 1st operand"};
+    module << Instruction{"popq", {param_regs[0]}, "[Sub] Load 2nd operand"};
+    module << Instruction{"subq", {param_regs[1], param_regs[0]}, "[Sub] sub"};
+    module << Instruction{"pushq", {param_regs[0]}, "[Sub] Push result"};
+}
+
+void binaryOpExprMult(Module &module,
+                      const std::array<std::string, 6U> param_regs) {
+    module << Instruction{"popq", {"%rax"}, "[Mult] Load 1st operand"};
+    module << Instruction{"popq", {param_regs[0]}, "[Mult] Load 2nd operand"};
+    module << Instruction{"imul", {param_regs[0]}, "[Mult] Mul"};
+    module << Instruction{"pushq", {"%rax"}, "[Mult] Push result"};
+}
+
+void binaryOpExprDiv(Module &module,
+                     const std::array<std::string, 6U> param_regs) {
+    // https://www.felixcloutier.com/x86/idiv
+    // https://www.felixcloutier.com/x86/cwd:cdq:cqo
+    // DIV operations have a peculiar usage, and several steps need to
+    // be taken care of before we can use idiv.
+    // The dividend of idiv operates on two registers: rdx and rax, together
+    // forming rdx:rax, thus having a dividend of 128 bits, even if we only
+    // want to be able to divide using 64-bit dividends. The required steps are:
+    // 1. Clear rdx
+    // 2. Load the divisor
+    // 3. Load the dividend into rax
+    // 4. Extend the dividend so it extends to rdx:rax using cqo. This
+    // automatically takes the sign of rax into acount
+    // 5. Perform idiv
+    // The result is now stored in rax, and the remainder is stored in rdx
+    module << Instruction{"movq", {"$0", "%rdx"}, "[Div] Clear rdx"};
+    // Note, we load the divisor first because that's on top of the stack
+    module << Instruction{"popq", {param_regs[0]}, "[Div] Load divisor"};
+    module << Instruction{"popq", {"%rax"}, "[Div] Load dividend"};
+    module << Instruction{"cqo", {}, "[Div] sign extend"};
+    module << Instruction{"idiv", {param_regs[0]}, "[Div] Div"};
+    module << Instruction{"pushq", {"%rax"}, "[Div] Push result"};
+}
+
+void binaryOpExprMod(Module &module,
+                     const std::array<std::string, 6U> param_regs) {
+    // See DIV, the remainder can be found in %rdx
+    module << Instruction{"movq", {"$0", "%rdx"}, "[Mod] rdx = 0"};
+    module << Instruction{"popq", {param_regs[0]}, "[Mod] Load modulus"};
+    module << Instruction{"popq", {"%rax"}, "[Mod] Load number"};
+    module << Instruction{"cqo", {}, "[Div] sign extend"};
+    module << Instruction{"idiv", {param_regs[0]}, "[Mod] Mod"};
+    module << Instruction{"pushq", {"%rdx"}, "[Mod] Push remainder"};
+}
+
+void binaryOpExprComparison(Module &module,
+                            const std::array<std::string, 6U> param_regs,
+                            std::string setcc) {
+    // https://www.felixcloutier.com/x86/setcc
+    // To do comparisons, we make use of the SETcc family. This family allows
+    // us to set a byte to 0 or 1 depending on the setcc function used (e.g.
+    // setge sets to 1 if greater or equal, otherwise to 0, based on the
+    // previous cmp call). Note that this only sets a byte, and not a full
+    // register. To account for this, we use %rax and set the lowest byte of
+    // %rax (located in %al) and then return %rax.
+    module << Instruction{"popq", {param_regs[1]}, "[CMP] Load 1st operand"};
+    module << Instruction{"popq", {param_regs[0]}, "[CMP] Load 2nd operand"};
+    module << Instruction{"cmp", {param_regs[1], param_regs[0]}, "[CMP] cmp"};
+    // Clear destination
+    module << Instruction{"movq", {"$0", "%rax"}, "[CMP] clear"};
+    // Set lowest byte of destination to result
+    // https://stackoverflow.com/questions/15191178/how-do-ax-ah-al-map-onto-eax
+    module << Instruction{setcc, {"%al"}, "[CMP] set correct bit"};
+    module << Instruction{"pushq", {"%rax"}, "[CMP] Push result"};
+}
+
+} // namespace codegen_x64
+
 void codegen_x64::CodeGeneratorX64::visitBinaryOpExpr(ast::BinaryOpExpr &node) {
     // We need to handle assignment differently.
     if (node.op.type == TokenType::EQUALS) {
@@ -111,11 +196,66 @@ void codegen_x64::CodeGeneratorX64::visitBinaryOpExpr(ast::BinaryOpExpr &node) {
     // ASSIGNMENT: Implement binary operators here.
     visit(*node.lhs);
     visit(*node.rhs);
+
+    switch (node.op.type) {
+    case TokenType::PLUS:
+        binaryOpExprPlus(module, abi_param_regs);
+        break;
+    case TokenType::MINUS:
+        binaryOpExprSubtract(module, abi_param_regs);
+        break;
+    case TokenType::STAR:
+        binaryOpExprMult(module, abi_param_regs);
+        break;
+    case TokenType::SLASH:
+        binaryOpExprDiv(module, abi_param_regs);
+        break;
+    case TokenType::PERCENT:
+        binaryOpExprMod(module, abi_param_regs);
+        break;
+    case TokenType::GREATER_THAN:
+        binaryOpExprComparison(module, abi_param_regs, "setg");
+        break;
+    case TokenType::GREATER_THAN_EQUALS:
+        binaryOpExprComparison(module, abi_param_regs, "setge");
+        break;
+    case TokenType::LESS_THAN:
+        binaryOpExprComparison(module, abi_param_regs, "setl");
+        break;
+    case TokenType::LESS_THAN_EQUALS:
+        binaryOpExprComparison(module, abi_param_regs, "setle");
+        break;
+    case TokenType::EQUALS_EQUALS:
+        binaryOpExprComparison(module, abi_param_regs, "sete");
+        break;
+    case TokenType::BANG_EQUALS:
+        binaryOpExprComparison(module, abi_param_regs, "setne");
+        break;
+    }
 }
 
 void codegen_x64::CodeGeneratorX64::visitUnaryOpExpr(ast::UnaryOpExpr &node) {
     // ASSIGNMENT: Implement unary operators here.
     visit(*node.operand);
+
+    switch (node.op.type) {
+    case TokenType::PLUS:
+        /* do nothing */
+        break;
+
+    case TokenType::MINUS:
+        module << Instruction{
+            "popq", {abi_param_regs[0]}, "Load register [Unary minus]"};
+        module << Instruction{"neg",
+                              {abi_param_regs[0]},
+                              "Apply negative operator [Unary minus]"};
+        module << Instruction{
+            "pushq", {abi_param_regs[0]}, "Push register [Unary minus]"};
+        break;
+
+    default:
+        break;
+    }
 }
 
 void codegen_x64::CodeGeneratorX64::visitIntLiteral(ast::IntLiteral &node) {
@@ -161,7 +301,8 @@ void codegen_x64::CodeGeneratorX64::visitFuncCallExpr(ast::FuncCallExpr &node) {
         "call", {node.name.lexeme}, "Some optional comment here"};
 
     // Clear remaining arguments
-    for (std::size_t i = abi_param_regs.size(); i < node.arguments.size(); i++) {
+    for (std::size_t i = abi_param_regs.size(); i < node.arguments.size();
+         i++) {
         module << Instruction{"popq", {abi_param_regs[0]}, "Clear arg"};
     }
     // Push result

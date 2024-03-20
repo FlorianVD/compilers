@@ -9,6 +9,8 @@
 
 #define DEBUG_TYPE "codegen-x64"
 
+int offset = 0;
+
 void codegen_x64::CodeGeneratorX64::visitFuncDecl(ast::FuncDecl &node) {
     LLVM_DEBUG(llvm::dbgs() << "In visitFuncDecl\n");
     const std::string name = node.name.lexeme;
@@ -71,6 +73,7 @@ void codegen_x64::CodeGeneratorX64::visitFuncDecl(ast::FuncDecl &node) {
                          fmt::format("Exit point of function '{}'", name)};
 
     // ASSIGNMENT: Implement the function epilogue here.
+    module << Instruction{"addq", {fmt::format("${}", abs(offset)), "%rsp"}};
     module << Instruction{"popq", {"%rbp"}, "Restore frame pointer"};
 
     for (size_t i = 0; i < abi_callee_saved_regs.size(); i++) {
@@ -120,14 +123,12 @@ void codegen_x64::CodeGeneratorX64::visitExprStmt(ast::ExprStmt &node) {
 void codegen_x64::CodeGeneratorX64::visitVarDecl(ast::VarDecl &node) {
     LLVM_DEBUG(llvm::dbgs() << "In visitVarDecl\n");
     // ASSIGNMENT: Implement variable declarations here.
-    module << Instruction{"subq", {"$4", "%rsp"}, "Reserve space on the stack"};
-    offset += 4; // 4 bytes, equals 32bit integers
+    offset -= 8; // 8 bytes, equals 64bit integers
     if (node.init) {
-        // module << Instruction{"movq",
-        //                       {"$42", fmt::format("-{}(%rbp)", offset)}};
         visit(*node.init);
     } else {
-        module << Instruction{"movq", {"$0", fmt::format("-{}(%rbp)", offset)}};
+        module << Instruction{
+            "subq", {"$8", "%rsp"}, "Reserve space on the stack"};
     }
     variable_declarations[&node] = offset;
 }
@@ -314,6 +315,13 @@ void codegen_x64::CodeGeneratorX64::visitStringLiteral(
 
 void codegen_x64::CodeGeneratorX64::visitVarRefExpr(ast::VarRefExpr &node) {
     // ASSIGNMENT: Implement variable references here.
+    auto it = symbol_table.find(&node);
+    if (it == symbol_table.end()) {
+        throw CodegenException("Cannot find symbol");
+    }
+
+    std::string location = variable(it->second);
+    module << Instruction{"pushq", {location}};
 }
 
 void codegen_x64::CodeGeneratorX64::visitArrayRefExpr(ast::ArrayRefExpr &node) {

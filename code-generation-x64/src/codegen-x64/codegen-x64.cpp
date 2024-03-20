@@ -10,10 +10,12 @@
 #define DEBUG_TYPE "codegen-x64"
 
 void codegen_x64::CodeGeneratorX64::visitFuncDecl(ast::FuncDecl &node) {
+    LLVM_DEBUG(llvm::dbgs() << "In visitFuncDecl\n");
     const std::string name = node.name.lexeme;
 
     // Clear variable declarations
     variable_declarations.clear();
+    offset = 0;
 
     // Create a basic block for the function entry
     module << BasicBlock{
@@ -43,8 +45,10 @@ void codegen_x64::CodeGeneratorX64::visitFuncDecl(ast::FuncDecl &node) {
 
     // Emit the VarDecl corresponding to each parameter, so we can reuse
     // the logic in visitVarDecl for function parameters.
-    for (const auto &arg : node.arguments)
+    for (const auto &arg : node.arguments) {
+        LLVM_DEBUG(llvm::dbgs() << "In visiting arguments\n");
         visit(*arg);
+    }
 
     // Populate the generated VarDecl with the value passed by the caller.
     for (std::size_t i = 0; i < node.arguments.size(); ++i) {
@@ -59,6 +63,7 @@ void codegen_x64::CodeGeneratorX64::visitFuncDecl(ast::FuncDecl &node) {
                               "Set parameter value [FuncDecl::PARAMS]"};
     }
 
+    LLVM_DEBUG(llvm::dbgs() << "In visiting function body\n");
     visit(*node.body);
 
     // Create a basic block for the function exit.
@@ -106,15 +111,25 @@ void codegen_x64::CodeGeneratorX64::visitReturnStmt(ast::ReturnStmt &node) {
 }
 
 void codegen_x64::CodeGeneratorX64::visitExprStmt(ast::ExprStmt &node) {
+    LLVM_DEBUG(llvm::dbgs() << "In visitExprStmt\n");
     visit(*node.expr);
     module << Instruction{
         "popq", {"%rax"}, "Discard expression statement [ExprStmt]"};
 }
 
 void codegen_x64::CodeGeneratorX64::visitVarDecl(ast::VarDecl &node) {
+    LLVM_DEBUG(llvm::dbgs() << "In visitVarDecl\n");
     // ASSIGNMENT: Implement variable declarations here.
-    if (node.init)
+    module << Instruction{"subq", {"$4", "%rsp"}, "Reserve space on the stack"};
+    offset += 4; // 4 bytes, equals 32bit integers
+    if (node.init) {
+        // module << Instruction{"movq",
+        //                       {"$42", fmt::format("-{}(%rbp)", offset)}};
         visit(*node.init);
+    } else {
+        module << Instruction{"movq", {"$0", fmt::format("-{}(%rbp)", offset)}};
+    }
+    variable_declarations[&node] = offset;
 }
 
 void codegen_x64::CodeGeneratorX64::visitArrayDecl(ast::ArrayDecl &node) {

@@ -87,16 +87,52 @@ void codegen_x64::CodeGeneratorX64::visitFuncDecl(ast::FuncDecl &node) {
 
 void codegen_x64::CodeGeneratorX64::visitIfStmt(ast::IfStmt &node) {
     // ASSIGNMENT: Implement if and if-else statements here.
+
+    std::string jmpLabelElse = label(".if_else");
+    std::string jmpLabelExit = label(".if_exit");
+
     visit(*node.condition);
+
+    // At this point, the condition true/false (0/1) is on top of the stack
+    module << Instruction{"popq", {abi_param_regs[0]}, "Pop condition"};
+    module << Instruction{"cmpq", {"$0", abi_param_regs[0]}, "See if false"};
+    // If condition is false, go to the else statement
+    module << Instruction{
+        "je", {jmpLabelElse}, "Jump to else if condition is false"};
+    // Otherwise, execute if-clause and then jump to beyond else statement
     visit(*node.if_clause);
+    module << Instruction{
+        "jmp", {jmpLabelExit}, "Jump to exit of if-statement"};
+
+    module << BasicBlock{jmpLabelElse, "Else statement of the if"};
     if (node.else_clause)
         visit(*node.else_clause);
+    module << BasicBlock{jmpLabelExit, "Exit of the if"};
 }
 
 void codegen_x64::CodeGeneratorX64::visitWhileStmt(ast::WhileStmt &node) {
     // ASSIGNMENT: Implement while statements here.
+    std::string jmpLabelStart = label(".while_start");
+    std::string jmpLabelExit = label(".while_exit");
+
+    // Set condition label
+    module << BasicBlock{jmpLabelStart,
+                         "Start of while loop, check if condition matches"};
+
     visit(*node.condition);
+    // At this point, the condition true/false is on top of the stack, so we
+    // pop the result and see if it is false (compare to 0)
+    module << Instruction{"popq", {abi_param_regs[0]}, "Pop condition"};
+    module << Instruction{"cmpq", {"$0", abi_param_regs[0]}, "See if false"};
+    // If false, go to exit
+    module << Instruction{
+        "je", {jmpLabelExit}, "Jump to exit if condition is false"};
     visit(*node.body);
+    // At this point, we are at the end of the while loop and we need to go back
+    // to right before the condition
+    module << Instruction{"jmp", {jmpLabelStart}, "Jump back to start"};
+    // If condition was not met, we end up here, beyond the while-block
+    module << BasicBlock{jmpLabelExit, "End of while loop"};
 }
 
 void codegen_x64::CodeGeneratorX64::visitReturnStmt(ast::ReturnStmt &node) {
@@ -212,15 +248,20 @@ void binaryOpExprComparison(Module &module,
     // previous cmp call). Note that this only sets a byte, and not a full
     // register. To account for this, we use %rax and set the lowest byte of
     // %rax (located in %al) and then return %rax.
+
+    // Clear destination
+    module << Instruction{"xor", {"%rax", "%rax"}, "[CMP] clear"};
+    // Compare
     module << Instruction{"popq", {param_regs[1]}, "[CMP] Load 1st operand"};
     module << Instruction{"popq", {param_regs[0]}, "[CMP] Load 2nd operand"};
-    module << Instruction{"cmp", {param_regs[1], param_regs[0]}, "[CMP] cmp"};
-    // Clear destination
-    module << Instruction{"movq", {"$0", "%rax"}, "[CMP] clear"};
+    module << Instruction{"cmpq", {param_regs[1], param_regs[0]}, "[CMP] cmp"};
     // Set lowest byte of destination to result
     // https://stackoverflow.com/questions/15191178/how-do-ax-ah-al-map-onto-eax
     module << Instruction{setcc, {"%al"}, "[CMP] set correct bit"};
-    module << Instruction{"pushq", {"%rax"}, "[CMP] Push result"};
+    module << Instruction{
+        "movzx", {"%al", param_regs[0]}, "Zero extend AL to first reg"};
+    module << Instruction{"pushq", {param_regs[0]}, "Push stored first reg"};
+    // module << Instruction{"pushq", {"%rax"}, "[CMP] Push result"};
 }
 
 } // namespace codegen_x64
@@ -332,10 +373,10 @@ void codegen_x64::CodeGeneratorX64::visitArrayRefExpr(ast::ArrayRefExpr &node) {
 
 void codegen_x64::CodeGeneratorX64::visitFuncCallExpr(ast::FuncCallExpr &node) {
     // ASSIGNMENT: Implement function calls here.
-    
+
     // Push in reverse order
-    for (size_t i = 0 ; i < node.arguments.size(); i++) {
-        visit(*node.arguments[node.arguments.size() - i - 1]);  
+    for (size_t i = 0; i < node.arguments.size(); i++) {
+        visit(*node.arguments[node.arguments.size() - i - 1]);
     }
     std::size_t register_count =
         std::min(node.arguments.size(), abi_param_regs.size());

@@ -309,16 +309,17 @@ void codegen_x64::CodeGeneratorX64::visitArrayRefExpr(ast::ArrayRefExpr &node) {
 
 void codegen_x64::CodeGeneratorX64::visitFuncCallExpr(ast::FuncCallExpr &node) {
     // ASSIGNMENT: Implement function calls here.
-    for (const auto &arg : node.arguments)
-        visit(*arg);
-
+    
+    // Push in reverse order
+    for (size_t i = 0 ; i < node.arguments.size(); i++) {
+        visit(*node.arguments[node.arguments.size() - i - 1]);  
+    }
     std::size_t register_count =
         std::min(node.arguments.size(), abi_param_regs.size());
-
-    // Pop registers
-    for (std::size_t i = 0; i < register_count; i++) {
+    for (int i = 0; i < register_count; i++) {
         module << Instruction{"popq", {abi_param_regs[i]}, "Add arg"};
     }
+
     // Call function
     module << Instruction{
         "call", {node.name.lexeme}, "Some optional comment here"};

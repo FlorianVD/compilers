@@ -1,5 +1,4 @@
-void do_print()
-{
+void do_print() {
     int i = 42;
     int j = 100;
     int k;
@@ -12,8 +11,7 @@ void do_print()
     print(k);
 }
 
-int main()
-{
+int main() {
     do_print();
 
     return 0;

@@ -67,6 +67,7 @@ class CodeGeneratorX64 : public ast::Visitor<CodeGeneratorX64> {
 
     // Maps variables to their offset relative to the base pointer.
     std::map<ast::Base *, int> variable_declarations;
+    int offset = 0;
 
     // Returns the location of a previously defined variable.
     std::string variable(ast::Base *var);

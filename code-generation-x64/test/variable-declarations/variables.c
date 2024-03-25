@@ -12,6 +12,12 @@ void do_print() {
 }
 
 int main() {
+    int x;
+    x = read();
+    int J = 54994548;
+    print(x);
+    J = x;
+    print(J);
     do_print();
 
     return 0;

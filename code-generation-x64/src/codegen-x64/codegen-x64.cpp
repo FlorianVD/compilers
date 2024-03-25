@@ -35,15 +35,14 @@ void codegen_x64::CodeGeneratorX64::visitFuncDecl(ast::FuncDecl &node) {
             "pushq", {abi_callee_saved_regs[i]}, "Restore register"};
     }
     // Set the frame pointer
-    module << Instruction{"pushq", {"%rbp"}, "Save frame pointer"};
     module << Instruction{
         "movq", {"%rsp", "%rbp"}, "Set frame pointer to top of stack"};
     // Align the stack on a 16 byte boundary. The `and` function is used
     // to set the lower bits of %rsp.
     // The bitmask of -16 is 11111111111111111111111111110000, which
     // clears the lower 4 bits
-    module << Instruction{
-        "andq", {"$-16", "%rsp"}, "Align the stack on a 16-byte boundary"};
+    // module << Instruction{
+    //     "andq", {"$-16", "%rsp"}, "Align the stack on a 16-byte boundary"};
 
     // Emit the VarDecl corresponding to each parameter, so we can reuse
     // the logic in visitVarDecl for function parameters.
@@ -74,7 +73,6 @@ void codegen_x64::CodeGeneratorX64::visitFuncDecl(ast::FuncDecl &node) {
 
     // ASSIGNMENT: Implement the function epilogue here.
     module << Instruction{"addq", {fmt::format("${}", abs(offset)), "%rsp"}};
-    module << Instruction{"popq", {"%rbp"}, "Restore frame pointer"};
 
     for (size_t i = 0; i < abi_callee_saved_regs.size(); i++) {
         // Note: in reverse order

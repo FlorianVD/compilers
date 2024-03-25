@@ -7,6 +7,7 @@
 #include "llvm/Support/raw_ostream.h"
 
 #include <algorithm>
+#include <fmt/core.h>
 #include <iterator>
 #include <unordered_set>
 
@@ -82,6 +83,10 @@ bool is_pop(const Instruction &instruction) {
     return instruction.opcode == "popq";
 }
 
+bool is_stack_reserve(const Instruction &instruction) {
+    return instruction.opcode == "subq";
+}
+
 bool have_same_operands(const Instruction &i1, const Instruction &i2) {
     if (i1.operands.size() != i2.operands.size())
         return false;
@@ -127,17 +132,22 @@ bool codegen_x64::OptimiserX64::optimise1(Module &mod) {
     for (auto &block : mod.blocks) {
         const auto instructions = block.instructions;
         size_t index = 0;
-        while (index < block.instructions.size() - 1) {
+        while (block.instructions.size() != 0 &&
+               index < block.instructions.size() - 1) {
             Instruction i1 = block.instructions[index];
             Instruction i2 = block.instructions[index + 1];
             if (is_push(i1) && is_pop(i2) && have_same_operands(i1, i2)) {
-                block.instructions[index] = Instruction{"nop", {}, "Optimisation 1: remove redundant push"};
-                block.instructions[index + 1] = Instruction{"nop", {}, "Optimisation 1: remove redundant pop"};
+                block.instructions[index] = Instruction{
+                    "nop", {}, "Optimisation 1: remove redundant push"};
+                block.instructions[index + 1] = Instruction{
+                    "nop", {}, "Optimisation 1: remove redundant pop"};
                 pushpops_removed += 2;
             }
             if (is_pop(i1) && is_push(i2) && have_same_operands(i1, i2)) {
-                block.instructions[index] = Instruction{"nop", {}, "Optimisation 1: remove redundant pop"};
-                block.instructions[index + 1] = Instruction{"nop", {}, "Optimisation 1: remove redundant push"};
+                block.instructions[index] = Instruction{
+                    "nop", {}, "Optimisation 1: remove redundant pop"};
+                block.instructions[index + 1] = Instruction{
+                    "nop", {}, "Optimisation 1: remove redundant push"};
                 pushpops_removed += 2;
             }
             index++;
@@ -154,7 +164,8 @@ bool codegen_x64::OptimiserX64::optimise2(Module &mod) {
     for (auto &block : mod.blocks) {
         const auto instructions = block.instructions;
         size_t index = 0;
-        while (index < block.instructions.size() - 1) {
+        while (block.instructions.size() != 0 &&
+               index < block.instructions.size() - 1) {
             Instruction i1 = block.instructions[index];
             Instruction i2 = block.instructions[index + 1];
             if (is_push(i1) && is_pop(i2) && single_operand_is_constant(i1)) {
@@ -162,7 +173,8 @@ bool codegen_x64::OptimiserX64::optimise2(Module &mod) {
                     Instruction{"movq",
                                 {i1.operands[0], i2.operands[0]},
                                 "Optimisation 2: Move constant value"};
-                block.instructions[index + 1] = Instruction{"nop", {}, "Optimisation 2: replace pop with nop"};
+                block.instructions[index + 1] = Instruction{
+                    "nop", {}, "Optimisation 2: replace pop with nop"};
                 movs_added++;
             }
             index++;
@@ -175,7 +187,41 @@ bool codegen_x64::OptimiserX64::optimise2(Module &mod) {
 bool codegen_x64::OptimiserX64::optimise3(Module &mod) {
     // ASSIGNMENT: Implement your third peephole optimisation here.
     // Return true only if you have changed the assembly.
-    return false;
+    size_t required_stack_space = 8;
+    bool changes = false;
+    for (auto &block : mod.blocks) {
+        const auto instructions = block.instructions;
+        size_t index = 0;
+        size_t count = 0;
+        while (block.instructions.size() != 0 &&
+               index < block.instructions.size() - 1) {
+            Instruction i1 = block.instructions[index];
+            Instruction i2 = block.instructions[index + 1];
+            if (is_stack_reserve(i1) && is_stack_reserve(i2)) {
+                count += 1;
+                makeNop(block.instructions[index]);
+                changes = true;
+            } else if (is_stack_reserve(i1) && !is_stack_reserve(i2) &&
+                       count > 0) {
+                count++;
+                required_stack_space *= count;
+                LLVM_DEBUG(llvm::dbgs() << "next instruction is " << i2.opcode
+                                        << " required_stack_space: "
+                                        << required_stack_space << "\n");
+                block.instructions[index] = Instruction{
+                    "subq",
+                    {fmt::format("${}", required_stack_space), "%rsp"},
+                    "Optimisation 3"};
+
+                // Reset in this block
+                required_stack_space = 8;
+                count = 0;
+            }
+            index++;
+        }
+    }
+
+    return changes;
 }
 
 void codegen_x64::OptimiserX64::makeNop(Instruction &ins) {

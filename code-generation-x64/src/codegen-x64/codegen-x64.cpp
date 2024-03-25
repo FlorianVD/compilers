@@ -418,7 +418,13 @@ std::string codegen_x64::CodeGeneratorX64::variable(ast::Base *var) {
 std::string codegen_x64::CodeGeneratorX64::parameter(std::size_t arg) {
     // ASSIGNMENT: Return the location where the caller places the value for
     // argument 'arg' (0-indexed).
-    return "$0";
+    if (arg < abi_param_regs.size()) {
+        return abi_param_regs[arg];
+    } else {
+        std::size_t offset = 8 * (abi_callee_saved_regs.size() + 1 +
+                                  (arg - abi_param_regs.size()));
+        return fmt::format("{}(%rbp)", offset);
+    }
 }
 
 void codegen_x64::CodeGeneratorX64::handleAssignment(ast::BinaryOpExpr &node) {

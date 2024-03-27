@@ -97,6 +97,7 @@ struct codegen_llvm::CodeGeneratorLLVM::Implementation {
     bool isCurrentBasicBlockTerminated();
 
     // ASSIGNMENT: Add any helper functions or member variables (if any) here.
+    llvm::Value *castToInt(llvm::Value *value);
 };
 
 codegen_llvm::CodeGeneratorLLVM::CodeGeneratorLLVM(
@@ -257,20 +258,117 @@ llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitVarDecl(
 llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitArrayDecl(
     ast::ArrayDecl &node) {
     // ASSIGNMENT: Implement array declarations here.
+
     throw CodegenException(
         "ASSIGNMENT: array declarations are not implemented!");
+}
+
+llvm::Value *
+codegen_llvm::CodeGeneratorLLVM::Implementation::castToInt(llvm::Value *value) {
+    return builder.CreateIntCast(value, T_int, false);
 }
 
 llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitBinaryOpExpr(
     ast::BinaryOpExpr &node) {
     // ASSIGNMENT: Implement binary operators here.
-    throw CodegenException("ASSIGNMENT: binary operators are not implemented!");
+
+    llvm::Value *lhs = visit(*node.lhs);
+    llvm::Value *rhs = visit(*node.rhs);
+    llvm::Type::TypeID lhsType = lhs->getType()->getTypeID();
+    if (lhs->getType() != rhs->getType()) {
+        throw new CodegenException("Binary operands don't have the same type!");
+    }
+
+    llvm::Type *type = lhs->getType();
+
+    // integer functions
+    if (lhs->getType() == T_int) {
+        switch (node.op.type) {
+        case TokenType::EQUALS_EQUALS:
+            return castToInt(builder.CreateICmpEQ(lhs, rhs));
+        case TokenType::BANG_EQUALS:
+            return castToInt(builder.CreateICmpNE(lhs, rhs));
+        case TokenType::LESS_THAN:
+            return castToInt(builder.CreateICmpSLT(lhs, rhs));
+        case TokenType::LESS_THAN_EQUALS:
+            return castToInt(builder.CreateICmpSLE(lhs, rhs));
+        case TokenType::GREATER_THAN:
+            return castToInt(builder.CreateICmpSGT(lhs, rhs));
+        case TokenType::GREATER_THAN_EQUALS:
+            return castToInt(builder.CreateICmpSGE(lhs, rhs));
+        case TokenType::PLUS:
+            return builder.CreateAdd(lhs, rhs);
+        case TokenType::MINUS:
+            return builder.CreateAdd(lhs, builder.CreateNeg(rhs));
+        case TokenType::STAR:
+            return builder.CreateMul(lhs, rhs);
+        case TokenType::SLASH:
+            return builder.CreateSDiv(lhs, rhs);
+        case TokenType::CARET: {
+            llvm::Value *lhsFloat = builder.CreateCast(
+                llvm::Instruction::CastOps::SIToFP, lhs, T_float);
+            llvm::Value *rhsFloat = builder.CreateCast(
+                llvm::Instruction::CastOps::SIToFP, rhs, T_float);
+            llvm::Value *powerFloat = builder.CreateBinaryIntrinsic(
+                llvm::Intrinsic::pow, lhsFloat, rhsFloat);
+            llvm::Value *powerInt = builder.CreateCast(
+                llvm::Instruction::CastOps::FPToSI, powerFloat, T_int);
+            return powerInt;
+        }
+        case TokenType::PERCENT:
+            return builder.CreateSRem(lhs, rhs);
+        }
+    }
+
+    if (lhs->getType() == T_float) {
+        switch (node.op.type) {
+        case TokenType::EQUALS_EQUALS:
+            return castToInt(builder.CreateFCmpUEQ(lhs, rhs));
+        case TokenType::BANG_EQUALS:
+            return castToInt(builder.CreateFCmpUNE(lhs, rhs));
+        case TokenType::LESS_THAN:
+            return castToInt(builder.CreateFCmpULT(lhs, rhs));
+        case TokenType::LESS_THAN_EQUALS:
+            return castToInt(builder.CreateFCmpULE(lhs, rhs));
+        case TokenType::GREATER_THAN:
+            return castToInt(builder.CreateFCmpUGT(lhs, rhs));
+        case TokenType::GREATER_THAN_EQUALS:
+            return castToInt(builder.CreateFCmpUGE(lhs, rhs));
+        case TokenType::PLUS:
+            return builder.CreateFAdd(lhs, rhs);
+        case TokenType::MINUS:
+            return builder.CreateFAdd(lhs, builder.CreateFNeg(rhs));
+        case TokenType::STAR:
+            return builder.CreateFMul(lhs, rhs);
+        case TokenType::SLASH:
+            return builder.CreateFDiv(lhs, rhs);
+        case TokenType::CARET:
+            return builder.CreateBinaryIntrinsic(llvm::Intrinsic::pow, lhs,
+                                                 rhs);
+        case TokenType::PERCENT:
+            return builder.CreateFRem(lhs, rhs);
+        }
+    }
+
+    throw CodegenException("Unsupported binary operators");
 }
 
 llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitUnaryOpExpr(
     ast::UnaryOpExpr &node) {
+
+    llvm::Value *value = visit(*node.operand);
+    if (node.op.type == TokenType::PLUS)
+        return value;
+
+    if (node.op.type == TokenType::MINUS) {
+        if (value->getType() == T_int)
+            return builder.CreateNeg(value);
+        if (value->getType() == T_float)
+            return builder.CreateFNeg(value);
+    }
+
     // ASSIGNMENT: Implement unary operators here.
-    throw CodegenException("ASSIGNMENT: unary operators are not implemented!");
+    throw CodegenException("Unsupported unary operator");
 }
 
 llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitIntLiteral(

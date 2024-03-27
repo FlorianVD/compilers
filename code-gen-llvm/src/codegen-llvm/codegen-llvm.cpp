@@ -1,4 +1,5 @@
 #include "codegen-llvm/codegen-llvm.hpp"
+
 #include "codegen-llvm/codegenexception.hpp"
 #include "sema/util.hpp"
 
@@ -200,7 +201,6 @@ llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitFuncDecl(
     // Set the insertion point of the builder to the end of this basic block.
     builder.SetInsertPoint(entry);
 
-
     // Generate code for the body of the function.
     visit(*node.body);
 
@@ -305,7 +305,16 @@ llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitArrayRefExpr(
 llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitFuncCallExpr(
     ast::FuncCallExpr &node) {
     // ASSIGNMENT: Implement function calls here.
-    throw CodegenException("ASSIGNMENT: function calls are not implemented!");
+    std::vector<llvm::Value *> args;
+    for (auto arg : node.arguments) {
+        args.push_back(visit(*arg));
+    }
+
+    llvm::Function *func = module->getFunction(node.name.lexeme);
+    // if (func->getFunctionType() != T_void) {
+    // }
+    builder.CreateCall(func, args);
+    return func;
 }
 
 llvm::AllocaInst *
@@ -326,4 +335,3 @@ bool codegen_llvm::CodeGeneratorLLVM::Implementation::
     isCurrentBasicBlockTerminated() {
     return builder.GetInsertBlock()->getTerminator() != nullptr;
 }
-

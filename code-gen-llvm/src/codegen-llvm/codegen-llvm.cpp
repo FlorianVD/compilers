@@ -311,9 +311,10 @@ llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitFuncCallExpr(
     }
 
     llvm::Function *func = module->getFunction(node.name.lexeme);
-    // if (func->getFunctionType() != T_void) {
-    // }
-    builder.CreateCall(func, args);
+    llvm::Value *val = builder.CreateCall(func, args);
+    if (func->getFunctionType() != T_void) {
+        return val;
+    }
     return func;
 }
 

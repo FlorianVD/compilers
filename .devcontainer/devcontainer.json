@@ -9,5 +9,10 @@
 	"extensions": [
 		"ms-vscode.cpptools",
 		"ms-vscode.cmake-tools"
-	]
+	],
+	"features": {
+		"ghcr.io/devcontainers/features/sshd:1": {
+			"version": "latest"
+		}
+	}
 }

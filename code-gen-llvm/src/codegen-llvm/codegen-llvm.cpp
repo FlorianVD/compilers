@@ -61,6 +61,9 @@ struct codegen_llvm::CodeGeneratorLLVM::Implementation {
     llvm::Value *visitVarRefExpr(ast::VarRefExpr &node);
     llvm::Value *visitArrayRefExpr(ast::ArrayRefExpr &node);
     llvm::Value *visitFuncCallExpr(ast::FuncCallExpr &node);
+    llvm::Type *getType(ast::Base & node);
+    llvm::AllocaInst *getVar(std::string &name);
+    ast::Base *getSymbol(ast::Base *node);
 
     CodeGeneratorLLVM *parent;
 
@@ -90,7 +93,10 @@ struct codegen_llvm::CodeGeneratorLLVM::Implementation {
     // Create an alloca in the entry block of the current function.
     llvm::AllocaInst *
     createAllocaInEntryBlock(llvm::Type *type,
-                             llvm::Value *array_size = nullptr);
+                             llvm::Value *array_size = nullptr,
+                             const llvm::Twine &name = "");
+
+    std::map<std::string, llvm::AllocaInst*> variables_tables;
 
     // Returns true if the current basic block is terminated, and false
     // otherwise.
@@ -249,9 +255,14 @@ llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitReturnStmt(
 
 llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitVarDecl(
     ast::VarDecl &node) {
-    // ASSIGNMENT: Implement variable declarations here.
-    throw CodegenException(
-        "ASSIGNMENT: variable declarations are not implemented!");
+    llvm::Type *varType = getType(node);
+    llvm::AllocaInst* alloc = createAllocaInEntryBlock(varType, nullptr, node.name.lexeme);
+    variables_tables[node.name.lexeme] = alloc;
+    if (node.init) {
+        llvm::Value *val = visit(*node.init);
+        builder.CreateStore(val, alloc);
+    }
+    return alloc;
 }
 
 llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitArrayDecl(
@@ -263,8 +274,11 @@ llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitArrayDecl(
 
 llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitBinaryOpExpr(
     ast::BinaryOpExpr &node) {
-    // ASSIGNMENT: Implement binary operators here.
-    throw CodegenException("ASSIGNMENT: binary operators are not implemented!");
+    ast::VarDecl * lhs = static_cast<ast::VarDecl *>(getSymbol(node.lhs.get()));
+    LLVM_DEBUG(llvm::dbgs() << lhs->name.lexeme << "\n");
+    llvm::AllocaInst * addr = getVar(lhs->name.lexeme);
+    llvm::Value *val = visit(*node.rhs);
+    return builder.CreateStore(val, addr);
 }
 
 llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitUnaryOpExpr(
@@ -291,9 +305,10 @@ codegen_llvm::CodeGeneratorLLVM::Implementation::visitStringLiteral(
 
 llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitVarRefExpr(
     ast::VarRefExpr &node) {
-    // ASSIGNMENT: Implement variable references here.
-    throw CodegenException(
-        "ASSIGNMENT: variable references are not implemented!");
+    
+    llvm::AllocaInst *addr = getVar(node.name.lexeme);
+    llvm::Type* varType = getType(node); 
+    return builder.CreateLoad(varType, addr);
 }
 
 llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitArrayRefExpr(
@@ -320,7 +335,7 @@ llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitFuncCallExpr(
 
 llvm::AllocaInst *
 codegen_llvm::CodeGeneratorLLVM::Implementation::createAllocaInEntryBlock(
-    llvm::Type *type, llvm::Value *array_size) {
+    llvm::Type *type, llvm::Value *array_size, const llvm::Twine &name) {
     // Get a reference to the current function.
     llvm::Function *current_function = builder.GetInsertBlock()->getParent();
 
@@ -329,10 +344,34 @@ codegen_llvm::CodeGeneratorLLVM::Implementation::createAllocaInEntryBlock(
 
     // Create the alloca
     llvm::IRBuilder<> alloca_builder{&entry_block, entry_block.begin()};
-    return alloca_builder.CreateAlloca(type, array_size);
+    return alloca_builder.CreateAlloca(type, array_size, name);
 }
 
 bool codegen_llvm::CodeGeneratorLLVM::Implementation::
     isCurrentBasicBlockTerminated() {
     return builder.GetInsertBlock()->getTerminator() != nullptr;
+}
+
+llvm::Type* codegen_llvm::CodeGeneratorLLVM::Implementation::getType(ast::Base &node) {
+    auto it = type_table.find(&node);
+    if (it == type_table.end()) {
+        throw CodegenException("Could not find type definition");
+    }
+    return it->second;
+}
+
+llvm::AllocaInst* codegen_llvm::CodeGeneratorLLVM::Implementation::getVar(std::string &name) {
+    auto it = variables_tables.find(name);
+    if (it == variables_tables.end()) {
+        throw CodegenException("Could not find variabele declaration");
+    }
+    return it->second;
+}
+
+ast::Base* codegen_llvm::CodeGeneratorLLVM::Implementation::getSymbol(ast::Base* node) {
+    auto it = symbol_table.find(node);
+    if(it == symbol_table.end()) {
+        throw CodegenException("Could not find symbol");
+    }
+    return it->second;
 }

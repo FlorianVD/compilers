@@ -1,8 +1,8 @@
 int main()
 {
     // Integers
-    int x;
-    x = 1;
+    int x = 1;
+    x = 5;
     print(x);
     x = 2;
     print(x);
@@ -19,16 +19,16 @@ int main()
     z = "World!";
     print_s(z);
 
-    // Multiple assignment
+    // // Multiple assignment
     int a;
     int b;
     int c;
 
     a = b = c = 100;
 
-    print(a);
-    print(b);
-    print(c);
+    // print(a);
+    // print(b);
+    // print(c);
 
     return 0;
 }

@@ -258,10 +258,10 @@ llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitVarDecl(
     ast::VarDecl &node) {
     llvm::Type *varType = getType(node);
     llvm::AllocaInst* alloc = createAllocaInEntryBlock(varType, nullptr, node.name.lexeme);
-    variables_tables[node.name.lexeme] = alloc;
+    variables_tables[node.name.lexeme] = alloc; // Stack address of the variabele
     if (node.init) {
         llvm::Value *val = visit(*node.init);
-        builder.CreateStore(val, alloc);
+        builder.CreateStore(val, alloc); // Store value on stack allocated address
     }
     return alloc;
 }
@@ -291,6 +291,12 @@ llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitBinaryOpExpr(
     }
 
     llvm::Type *type = lhs->getType();
+
+    if (node.op.type == TokenType::EQUALS) {
+        ast::VarDecl *var = static_cast<ast::VarDecl *>(getSymbol(node.lhs.get()));
+        llvm::AllocaInst* varAddress = getVar(var->name.lexeme);
+        return builder.CreateStore(rhs, varAddress);
+    }
 
     // integer functions
     if (lhs->getType() == T_int) {

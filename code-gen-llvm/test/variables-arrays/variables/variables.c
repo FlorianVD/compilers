@@ -26,9 +26,11 @@ int main()
 
     a = b = c = 100;
 
-    // print(a);
-    // print(b);
-    // print(c);
+    c = 5;
+
+    print(a);
+    print(b);
+    print(c);
 
     return 0;
 }

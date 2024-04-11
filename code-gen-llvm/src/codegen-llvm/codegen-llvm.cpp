@@ -59,6 +59,7 @@ struct codegen_llvm::CodeGeneratorLLVM::Implementation {
     llvm::Value *visitFloatLiteral(ast::FloatLiteral &node);
     llvm::Value *visitStringLiteral(ast::StringLiteral &node);
     llvm::Value *visitVarRefExpr(ast::VarRefExpr &node);
+    llvm::Value *visitVarRefExpr(llvm::Value *address);
     llvm::Value *visitArrayRefExpr(ast::ArrayRefExpr &node);
     llvm::Value *visitFuncCallExpr(ast::FuncCallExpr &node);
     llvm::Type *getType(ast::Base & node);
@@ -256,6 +257,7 @@ llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitReturnStmt(
 
 llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitVarDecl(
     ast::VarDecl &node) {
+    LLVM_DEBUG(llvm::dbgs() << "in varDecl" << "\n");
     llvm::Type *varType = getType(node);
     llvm::AllocaInst* alloc = createAllocaInEntryBlock(varType, nullptr, node.name.lexeme);
     variables_tables[node.name.lexeme] = alloc; // Stack address of the variabele
@@ -286,16 +288,19 @@ llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitBinaryOpExpr(
     llvm::Value *lhs = visit(*node.lhs);
     llvm::Value *rhs = visit(*node.rhs);
     llvm::Type::TypeID lhsType = lhs->getType()->getTypeID();
-    if (lhs->getType() != rhs->getType()) {
-        throw new CodegenException("Binary operands don't have the same type!");
-    }
 
     llvm::Type *type = lhs->getType();
 
     if (node.op.type == TokenType::EQUALS) {
         ast::VarDecl *var = static_cast<ast::VarDecl *>(getSymbol(node.lhs.get()));
         llvm::AllocaInst* varAddress = getVar(var->name.lexeme);
-        return builder.CreateStore(rhs, varAddress);
+        LLVM_DEBUG(llvm::dbgs() << "var: " << var->name.lexeme << " addr: " << varAddress << "\n");
+        builder.CreateStore(rhs, varAddress);
+        return rhs; // Contains the address of the referenced value
+    }
+
+    if (lhs->getType() != rhs->getType()) {
+        throw CodegenException("Binary operands don't have the same type!");
     }
 
     // integer functions
@@ -402,6 +407,10 @@ llvm::Value *
 codegen_llvm::CodeGeneratorLLVM::Implementation::visitStringLiteral(
     ast::StringLiteral &node) {
     return builder.CreateGlobalStringPtr(node.value);
+}
+
+llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitVarRefExpr(llvm::Value  *address) {
+    return builder.CreateLoad(address->getType(), address);
 }
 
 llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitVarRefExpr(

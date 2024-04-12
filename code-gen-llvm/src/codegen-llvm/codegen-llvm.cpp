@@ -63,7 +63,7 @@ struct codegen_llvm::CodeGeneratorLLVM::Implementation {
     llvm::Value *visitVarRefExpr(llvm::Value *address);
     llvm::Value *visitArrayRefExpr(ast::ArrayRefExpr &node);
     llvm::Value *visitFuncCallExpr(ast::FuncCallExpr &node);
-    llvm::Type *getType(ast::Base & node);
+    llvm::Type *getType(ast::Base &node);
     llvm::AllocaInst *getVar(std::string &name);
     ast::Base *getSymbol(ast::Base *node);
 
@@ -98,7 +98,7 @@ struct codegen_llvm::CodeGeneratorLLVM::Implementation {
                              llvm::Value *array_size = nullptr,
                              const llvm::Twine &name = "");
 
-    std::map<std::string, llvm::AllocaInst*> variables_tables;
+    std::map<std::string, llvm::AllocaInst *> variables_tables;
 
     // Returns true if the current basic block is terminated, and false
     // otherwise.
@@ -246,14 +246,12 @@ llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitFuncDecl(
 
     return func;
 }
-using namespace llvm;
-#include <iostream>
 
 llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::castToBool(
     llvm::Value *value) {
     // Compare to 0
-    return builder.CreateICmpNE(value,
-                                ConstantInt::get(Type::getInt64Ty(context), 0));
+    return builder.CreateICmpNE(
+        value, llvm::ConstantInt::get(llvm::Type::getInt64Ty(context), 0));
 }
 
 llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitIfStmt(
@@ -270,9 +268,12 @@ llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitIfStmt(
     std::string else_name = fmt::format("else_block_{}_{}", funcName, id);
     std::string end_name = fmt::format("end_block_{}_{}", funcName, id);
 
-    BasicBlock *if_block = BasicBlock::Create(context, if_name, func);
-    BasicBlock *else_block = BasicBlock::Create(context, else_name, func);
-    BasicBlock *end_block = BasicBlock::Create(context, end_name, func);
+    llvm::BasicBlock *if_block =
+        llvm::BasicBlock::Create(context, if_name, func);
+    llvm::BasicBlock *else_block =
+        llvm::BasicBlock::Create(context, else_name, func);
+    llvm::BasicBlock *end_block =
+        llvm::BasicBlock::Create(context, end_name, func);
 
     builder.CreateCondBr(condition, if_block, else_block);
 
@@ -314,13 +315,17 @@ llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitReturnStmt(
 
 llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitVarDecl(
     ast::VarDecl &node) {
-    LLVM_DEBUG(llvm::dbgs() << "in varDecl" << "\n");
+    LLVM_DEBUG(llvm::dbgs() << "in varDecl"
+                            << "\n");
     llvm::Type *varType = getType(node);
-    llvm::AllocaInst* alloc = createAllocaInEntryBlock(varType, nullptr, node.name.lexeme);
-    variables_tables[node.name.lexeme] = alloc; // Stack address of the variabele
+    llvm::AllocaInst *alloc =
+        createAllocaInEntryBlock(varType, nullptr, node.name.lexeme);
+    variables_tables[node.name.lexeme] =
+        alloc; // Stack address of the variabele
     if (node.init) {
         llvm::Value *val = visit(*node.init);
-        builder.CreateStore(val, alloc); // Store value on stack allocated address
+        builder.CreateStore(val,
+                            alloc); // Store value on stack allocated address
     }
     return alloc;
 }
@@ -349,9 +354,11 @@ llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitBinaryOpExpr(
     llvm::Type *type = lhs->getType();
 
     if (node.op.type == TokenType::EQUALS) {
-        ast::VarDecl *var = static_cast<ast::VarDecl *>(getSymbol(node.lhs.get()));
-        llvm::AllocaInst* varAddress = getVar(var->name.lexeme);
-        LLVM_DEBUG(llvm::dbgs() << "var: " << var->name.lexeme << " addr: " << varAddress << "\n");
+        ast::VarDecl *var =
+            static_cast<ast::VarDecl *>(getSymbol(node.lhs.get()));
+        llvm::AllocaInst *varAddress = getVar(var->name.lexeme);
+        LLVM_DEBUG(llvm::dbgs() << "var: " << var->name.lexeme
+                                << " addr: " << varAddress << "\n");
         builder.CreateStore(rhs, varAddress);
         return rhs; // Contains the address of the referenced value
     }
@@ -465,15 +472,16 @@ codegen_llvm::CodeGeneratorLLVM::Implementation::visitStringLiteral(
     return builder.CreateGlobalStringPtr(node.value);
 }
 
-llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitVarRefExpr(llvm::Value  *address) {
+llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitVarRefExpr(
+    llvm::Value *address) {
     return builder.CreateLoad(address->getType(), address);
 }
 
 llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitVarRefExpr(
     ast::VarRefExpr &node) {
-    
+
     llvm::AllocaInst *addr = getVar(node.name.lexeme);
-    llvm::Type* varType = getType(node); 
+    llvm::Type *varType = getType(node);
     return builder.CreateLoad(varType, addr);
 }
 
@@ -518,7 +526,8 @@ bool codegen_llvm::CodeGeneratorLLVM::Implementation::
     return builder.GetInsertBlock()->getTerminator() != nullptr;
 }
 
-llvm::Type* codegen_llvm::CodeGeneratorLLVM::Implementation::getType(ast::Base &node) {
+llvm::Type *
+codegen_llvm::CodeGeneratorLLVM::Implementation::getType(ast::Base &node) {
     auto it = type_table.find(&node);
     if (it == type_table.end()) {
         throw CodegenException("Could not find type definition");
@@ -526,7 +535,8 @@ llvm::Type* codegen_llvm::CodeGeneratorLLVM::Implementation::getType(ast::Base &
     return it->second;
 }
 
-llvm::AllocaInst* codegen_llvm::CodeGeneratorLLVM::Implementation::getVar(std::string &name) {
+llvm::AllocaInst *
+codegen_llvm::CodeGeneratorLLVM::Implementation::getVar(std::string &name) {
     auto it = variables_tables.find(name);
     if (it == variables_tables.end()) {
         throw CodegenException("Could not find variabele declaration");
@@ -534,9 +544,10 @@ llvm::AllocaInst* codegen_llvm::CodeGeneratorLLVM::Implementation::getVar(std::s
     return it->second;
 }
 
-ast::Base* codegen_llvm::CodeGeneratorLLVM::Implementation::getSymbol(ast::Base* node) {
+ast::Base *
+codegen_llvm::CodeGeneratorLLVM::Implementation::getSymbol(ast::Base *node) {
     auto it = symbol_table.find(node);
-    if(it == symbol_table.end()) {
+    if (it == symbol_table.end()) {
         throw CodegenException("Could not find symbol");
     }
     return it->second;

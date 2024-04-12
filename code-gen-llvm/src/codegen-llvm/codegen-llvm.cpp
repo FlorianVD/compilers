@@ -15,6 +15,7 @@
 #include "llvm/Support/raw_ostream.h"
 
 #include <fmt/core.h>
+#include <stack>
 
 #define DEBUG_TYPE "codegen-llvm"
 
@@ -98,6 +99,15 @@ struct codegen_llvm::CodeGeneratorLLVM::Implementation {
 
     // ASSIGNMENT: Add any helper functions or member variables (if any) here.
     llvm::Value *castToInt(llvm::Value *value);
+    llvm::Value *castToBool(llvm::Value *value);
+    int __unique_id = 0;
+    int getNextUniqueId() {
+        __unique_id++;
+        return __unique_id;
+    }
+    std::stack<std::string>
+        currentFunctionName; // If nested functions are not allowed, this could
+                             // be a normal string
 };
 
 codegen_llvm::CodeGeneratorLLVM::CodeGeneratorLLVM(
@@ -196,6 +206,9 @@ llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitFuncDecl(
             "Did not find function '{}' in the LLVM module symbol table!",
             node.name.lexeme));
 
+    // Push current function name to stack
+    currentFunctionName.push(node.name.lexeme);
+
     // Create an entry basic block in the function.
     llvm::BasicBlock *entry = llvm::BasicBlock::Create(context, "entry", func);
 
@@ -221,13 +234,57 @@ llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitFuncDecl(
             fmt::format("Function '{}' failed validation", node.name.lexeme));
     }
 
+    // Pop current function name from stack
+    currentFunctionName.pop();
+
     return func;
+}
+using namespace llvm;
+#include <iostream>
+
+llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::castToBool(
+    llvm::Value *value) {
+    // Compare to 0
+    return builder.CreateICmpNE(value,
+                                ConstantInt::get(Type::getInt64Ty(context), 0));
 }
 
 llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitIfStmt(
     ast::IfStmt &node) {
     // ASSIGNMENT: Implement if statements here.
-    throw CodegenException("ASSIGNMENT: if statements are not implemented!");
+    llvm::Value *condition = castToBool(visit(*node.condition));
+
+    std::string funcName = currentFunctionName.top();
+    llvm::Function *func = module->getFunction(funcName);
+
+    // Generate unique block names
+    int id = getNextUniqueId();
+    std::string if_name = fmt::format("if_block_{}_{}", funcName, id);
+    std::string else_name = fmt::format("else_block_{}_{}", funcName, id);
+    std::string end_name = fmt::format("end_block_{}_{}", funcName, id);
+
+    BasicBlock *if_block = BasicBlock::Create(context, if_name, func);
+    BasicBlock *else_block = BasicBlock::Create(context, else_name, func);
+    BasicBlock *end_block = BasicBlock::Create(context, end_name, func);
+
+    builder.CreateCondBr(condition, if_block, else_block);
+
+    // Visit if block
+    builder.SetInsertPoint(if_block);
+    visit(*node.if_clause);
+    builder.CreateBr(end_block);
+
+    // Visit else block
+    builder.SetInsertPoint(else_block);
+    if (node.else_clause) {
+        visit(*node.else_clause);
+    }
+    builder.CreateBr(end_block);
+
+    // TODO handle returns in if or else statements
+
+    builder.SetInsertPoint(end_block);
+    return nullptr;
 }
 
 llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitWhileStmt(
@@ -367,7 +424,6 @@ llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitUnaryOpExpr(
             return builder.CreateFNeg(value);
     }
 
-    // ASSIGNMENT: Implement unary operators here.
     throw CodegenException("Unsupported unary operator");
 }
 

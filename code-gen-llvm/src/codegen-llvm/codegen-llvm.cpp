@@ -292,13 +292,46 @@ llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitIfStmt(
     // TODO handle returns in if or else statements
 
     builder.SetInsertPoint(end_block);
-    return nullptr;
+    return nullptr; // Don't return anything, as if-else blocks don't have
+                    // values
 }
 
 llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitWhileStmt(
     ast::WhileStmt &node) {
     // ASSIGNMENT: Implement while statements here.
-    throw CodegenException("ASSIGNMENT: while statements are not implemented!");
+
+    std::string funcName = currentFunctionName.top();
+    llvm::Function *func = module->getFunction(funcName);
+
+    // Generate unique block names
+    int id = getNextUniqueId();
+    std::string condition_name = fmt::format("while_start_block_{}_{}", funcName, id);
+    std::string loop_name = fmt::format("while_loop_block_{}_{}", funcName, id);
+    std::string end_name = fmt::format("while_end_block_{}_{}", funcName, id);
+
+    // Set up condition
+    llvm::BasicBlock *condition_block =
+        llvm::BasicBlock::Create(context, condition_name, func);
+    builder.CreateBr(condition_block);
+    builder.SetInsertPoint(condition_block);
+    llvm::Value *condition = castToBool(visit(*node.condition));
+
+    llvm::BasicBlock *loop_block =
+        llvm::BasicBlock::Create(context, loop_name, func);
+    llvm::BasicBlock *end_block =
+        llvm::BasicBlock::Create(context, end_name, func);
+
+    builder.CreateCondBr(condition, loop_block, end_block);
+
+    // Visit loop
+    builder.SetInsertPoint(loop_block);
+    visit(*node.body);
+    builder.CreateBr(condition_block);
+
+    // Visit end block
+    builder.SetInsertPoint(end_block);
+
+    return nullptr;
 }
 
 llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitReturnStmt(

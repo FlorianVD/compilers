@@ -343,7 +343,11 @@ llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitWhileStmt(
     // Visit loop
     builder.SetInsertPoint(loop_block);
     visit(*node.body);
-    builder.CreateBr(condition_block);
+    if (isCurrentBasicBlockTerminated()) {
+        builder.SetInsertPoint(end_block);
+    } else {
+        builder.CreateBr(condition_block);
+    }
 
     // Visit end block
     builder.SetInsertPoint(end_block);
@@ -386,7 +390,7 @@ llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitArrayDecl(
                             << "\n");
     auto arraySize = llvm::ConstantInt::get(llvm::Type::getInt64Ty(context),
                                             node.size->value);
-    llvm::ArrayType *type = llvm::ArrayType::get(llvm::Type::getInt64Ty(context), node.size->value);
+    llvm::ArrayType *type = llvm::ArrayType::get(sema::Util::parseLLVMType(context, node.type), node.size->value);
     llvm::AllocaInst *address =
         createAllocaInEntryBlock(type, nullptr, node.name.lexeme);
     variables_tables[node.name.lexeme] = address;
@@ -417,7 +421,7 @@ llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitBinaryOpExpr(
             indices.push_back(builder.getInt64(0));
             indices.push_back(visit(*arrayRef->index));
 
-            llvm::ArrayType *type = llvm::ArrayType::get(llvm::Type::getInt64Ty(context), arrayDecl->size->value);
+            llvm::ArrayType *type = llvm::ArrayType::get(sema::Util::parseLLVMType(context, arrayDecl->type), arrayDecl->size->value);
             LLVM_DEBUG(llvm::dbgs() << "kind: arrayDecl" << "\n");
             
             llvm::Value *indexAddress = builder.CreateInBoundsGEP(type, ptr, indices, "gep");
@@ -564,7 +568,7 @@ llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitVarRefExpr(
 llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitArrayRefExpr(
     ast::ArrayRefExpr &node) {
     llvm::Value *address = getVar(node.name.lexeme);
-    ast::ArrayDecl *varDef =  static_cast<ast::ArrayDecl *>(getSymbol(&node));
+    ast::ArrayDecl *arrayDecl =  static_cast<ast::ArrayDecl *>(getSymbol(&node));
     llvm::Type *varType = getType(node);
     // LLVM_DEBUG(llvm::dbgs() << "type: " << varType->getTypeID() << "\n");
     std::vector<llvm::Value *> arrayIndices;
@@ -573,7 +577,7 @@ llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitArrayRefExpr(
     arrayIndices.push_back(index);
 
     // Type of the array
-    llvm::ArrayType *type = llvm::ArrayType::get(llvm::Type::getInt64Ty(context), varDef->size->value);
+    llvm::ArrayType *type = llvm::ArrayType::get(sema::Util::parseLLVMType(context, arrayDecl->type), arrayDecl->size->value);
 
     auto arrPtr = builder.CreateInBoundsGEP(type, address, arrayIndices, "gep");
     // Should be the type of the returned variable

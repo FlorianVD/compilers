@@ -2,21 +2,21 @@ int main()
 {
     // Integers
     int x[3];
-    // x[0] = 1;
-    // x[1] = 2;
-    // x[2] = 3;
+    x[0] = 1;
+    x[1] = 2;
+    x[2] = 3;
 
-    // print(x[0]);
-    // print(x[1]);
-    // print(x[2]);
+    print(x[0]);
+    print(x[1]);
+    print(x[2]);
 
-    // x[0] = x[0] * 2;
-    // x[1] = x[1] * 2;
-    // x[2] = x[2] * 2;
+    x[0] = x[0] * 2;
+    x[1] = x[1] * 2;
+    x[2] = x[2] * 2;
 
-    // print(x[0]);
-    // print(x[1]);
-    // print(x[2]);
+    print(x[0]);
+    print(x[1]);
+    print(x[2]);
 
     // // Floats
     // float y[2];

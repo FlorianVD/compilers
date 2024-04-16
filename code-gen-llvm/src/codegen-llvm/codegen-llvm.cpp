@@ -364,28 +364,28 @@ llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitVarDecl(
     LLVM_DEBUG(llvm::dbgs() << "in varDecl"
                             << "\n");
     llvm::Type *varType = getType(node);
-    llvm::AllocaInst *alloc =
+    llvm::AllocaInst *ptr =
         createAllocaInEntryBlock(varType, nullptr, node.name.lexeme);
-    variables_tables[node.name.lexeme] =
-        alloc; // Stack address of the variabele
+    variables_tables[node.name.lexeme] = ptr; // Stack address of the variabele
     if (node.init) {
         llvm::Value *val = visit(*node.init);
         builder.CreateStore(val,
-                            alloc); // Store value on stack allocated address
+                            ptr); // Store value on stack allocated address
     }
-    return alloc;
+    return ptr;
 }
 
 llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitArrayDecl(
     ast::ArrayDecl &node) {
     LLVM_DEBUG(llvm::dbgs() << "in arrayDecl"
                             << "\n");
-    llvm::Type *varType = getType(node);
     auto arraySize = llvm::ConstantInt::get(llvm::Type::getInt64Ty(context),
                                             node.size->value);
+    llvm::ArrayType *type = llvm::ArrayType::get(llvm::Type::getInt64Ty(context), node.size->value);
     llvm::AllocaInst *address =
-        createAllocaInEntryBlock(varType, arraySize, node.name.lexeme);
+        createAllocaInEntryBlock(type, nullptr, node.name.lexeme);
     variables_tables[node.name.lexeme] = address;
+    LLVM_DEBUG(llvm::dbgs() << "delc address " << address << "\n");
     return address;
 }
 
@@ -397,22 +397,43 @@ codegen_llvm::CodeGeneratorLLVM::Implementation::castToInt(llvm::Value *value) {
 llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitBinaryOpExpr(
     ast::BinaryOpExpr &node) {
     // ASSIGNMENT: Implement binary operators here.
-
-    llvm::Value *lhs = visit(*node.lhs);
     llvm::Value *rhs = visit(*node.rhs);
+
+    if (node.op.type == TokenType::EQUALS) {
+        ast::Base *var = getSymbol(node.lhs.get());
+        if (var->kind == ast::Base::Kind::ArrayDecl) {
+            LLVM_DEBUG(llvm::dbgs() << "kind: arrayDecl" << "\n");
+            ast::ArrayDecl* arrayDecl = static_cast<ast::ArrayDecl *>(var);
+            ast::ArrayRefExpr *arrayRef = static_cast<ast::ArrayRefExpr *>(node.lhs.get());
+            llvm::Value * ptr = getVar(arrayDecl->name.lexeme);
+            LLVM_DEBUG(llvm::dbgs() << "var: " << arrayDecl->name.lexeme
+                                    << " addr: " << ptr << "\n");
+            std::vector<llvm::Value *> indices;
+            indices.push_back(builder.getInt64(0));
+            indices.push_back(visit(*arrayRef->index));
+
+            llvm::ArrayType *type = llvm::ArrayType::get(llvm::Type::getInt64Ty(context), arrayDecl->size->value);
+            LLVM_DEBUG(llvm::dbgs() << "kind: arrayDecl" << "\n");
+            
+            llvm::Value *indexAddress = builder.CreateInBoundsGEP(type, ptr, indices, "gep");
+            builder.CreateStore(rhs, indexAddress);
+        } else if(var->kind == ast::Base::Kind::VarDecl) {
+            LLVM_DEBUG(llvm::dbgs() << "kind: varDecl" "\n");
+            ast::VarDecl *varDecl = static_cast<ast::VarDecl *>(var);
+            llvm::AllocaInst *addressPtr = getVar(varDecl->name.lexeme);
+            builder.CreateStore(rhs, addressPtr);
+        } else {
+            LLVM_DEBUG(llvm::dbgs() << "kind: something else" "\n");
+        }
+        return rhs;
+    }
+
+    llvm::Value *lhs = visit(*node.lhs); // Need to figure out if the LHS is an array ref or not
     llvm::Type::TypeID lhsType = lhs->getType()->getTypeID();
 
     llvm::Type *type = lhs->getType();
+    LLVM_DEBUG(llvm::dbgs() << "binary type: " << type->getTypeID() << "\n");
 
-    if (node.op.type == TokenType::EQUALS) {
-        ast::VarDecl *var =
-            static_cast<ast::VarDecl *>(getSymbol(node.lhs.get()));
-        llvm::AllocaInst *varAddress = getVar(var->name.lexeme);
-        LLVM_DEBUG(llvm::dbgs() << "var: " << var->name.lexeme
-                                << " addr: " << varAddress << "\n");
-        builder.CreateStore(rhs, varAddress);
-        return rhs; // Contains the address of the referenced value
-    }
 
     if (lhs->getType() != rhs->getType()) {
         throw CodegenException("Binary operands don't have the same type!");
@@ -538,10 +559,21 @@ llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitVarRefExpr(
 llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitArrayRefExpr(
     ast::ArrayRefExpr &node) {
     llvm::Value *address = getVar(node.name.lexeme);
+    ast::ArrayDecl *varDef =  static_cast<ast::ArrayDecl *>(getSymbol(&node));
     llvm::Type *varType = getType(node);
-    LLVM_DEBUG(llvm::dbgs() << "type: " << varType->getTypeID() << "\n");
+    // LLVM_DEBUG(llvm::dbgs() << "type: " << varType->getTypeID() << "\n");
+    std::vector<llvm::Value *> arrayIndices;
     llvm::Value *index = visit(*node.index);
-    return llvm::GetElementPtrInst::CreateInBounds(varType, address, index, "", builder.GetInsertBlock());
+    arrayIndices.push_back(builder.getInt64(0));
+    arrayIndices.push_back(index);
+
+    // Type of the array
+    llvm::ArrayType *type = llvm::ArrayType::get(llvm::Type::getInt64Ty(context), varDef->size->value);
+
+    auto arrPtr = builder.CreateInBoundsGEP(type, address, arrayIndices, "gep");
+    // Should be the type of the returned variable
+    return builder.CreateLoad(varType, arrPtr);
+    // return llvm::GetElementPtrInst::CreateInBounds(varType, address, index, "", builder.GetInsertBlock());
 }
 
 llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitFuncCallExpr(

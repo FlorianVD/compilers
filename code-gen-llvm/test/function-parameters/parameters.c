@@ -5,7 +5,7 @@ void print_numbers(int i, float f)
     i = i * 2;
     print(i);
 
-    // floats
+    // // floats
     print_f(f);
     f = f * 2.0;
     print_f(f);

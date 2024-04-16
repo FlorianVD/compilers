@@ -222,6 +222,11 @@ llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitFuncDecl(
     // Set the insertion point of the builder to the end of this basic block.
     builder.SetInsertPoint(entry);
 
+    for(int i = 0; i < func->arg_size(); i++) {
+        llvm::Value* addr = visit(*node.arguments[i]);
+        builder.CreateStore(func->getArg(i) , addr);
+    }
+
     // Generate code for the body of the function.
     visit(*node.body);
 
@@ -236,11 +241,11 @@ llvm::Value *codegen_llvm::CodeGeneratorLLVM::Implementation::visitFuncDecl(
     }
 
     // Validate the generated code, checking for consistency.
-    // if (llvm::verifyFunction(*func, &llvm::errs())) {
-    //     throw CodegenException(
-    //         fmt::format("Function '{}' failed validation",
-    //         node.name.lexeme));
-    // }
+    if (llvm::verifyFunction(*func, &llvm::errs())) {
+        throw CodegenException(
+            fmt::format("Function '{}' failed validation",
+            node.name.lexeme));
+    }
 
     // Pop current function name from stack
     currentFunctionName.pop();
@@ -624,7 +629,7 @@ llvm::AllocaInst *
 codegen_llvm::CodeGeneratorLLVM::Implementation::getVar(std::string &name) {
     auto it = variables_tables.find(name);
     if (it == variables_tables.end()) {
-        throw CodegenException("Could not find variabele declaration");
+        throw CodegenException("Could not find variable declaration");
     }
     return it->second;
 }

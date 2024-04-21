@@ -50,19 +50,31 @@ public:
       }
     }
 
+    
 
     // Process any GEP instructions
     for (auto *GEP : WorkList) {
       LLVM_DEBUG(dbgs() << "BoundsCheck: found a GEP, " << *GEP << "\n");
-
+      
       // ASSIGNMENT: Implement your pass here.
-
       // Error message template for static case:
 
-      // auto message =
-      //     fmt::format("out-of-bounds array access detected at {}:{}",
-      //                 filename, line_number);
+      // Get index
+      int index = -1;
+      if (auto CI = llvm::dyn_cast<llvm::ConstantInt>(GEP->getOperand(2)))
+        index = CI->getZExtValue();
+      
+      // Get array size
+      auto array_pointer = GEP->getOperand(0); // Get the pointer to the array
+      auto array_type = dyn_cast<PointerType>(array_pointer->getType())->getPointerElementType(); // Get the underlying type of the array (e.g. [10 x i64])
+      auto array_size = array_type->getArrayNumElements(); // Get the size of the array
 
+      // Verify location
+      if (index < 0 || index >= array_size) {
+        auto debugLoc = GEP->getDebugLoc();
+       auto message = fmt::format("out-of-bounds array access detected at {}:{}", debugLoc->getFilename().str(), debugLoc->getLine());
+       LLVM_DEBUG(dbgs() << "ERROR: " << message.c_str() << "\n"); 
+      }
 
       // Error message template for dynamic case:
 

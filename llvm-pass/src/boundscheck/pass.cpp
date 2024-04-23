@@ -50,14 +50,14 @@ public:
       }
     }
 
-    
+    // Keep track of all analyses, can be changed depending on the GEP
+    auto analyses = PreservedAnalyses::all();
 
     // Process any GEP instructions
     for (auto *GEP : WorkList) {
       LLVM_DEBUG(dbgs() << "BoundsCheck: found a GEP, " << *GEP << "\n");
       
       // ASSIGNMENT: Implement your pass here.
-      // Error message template for static case:
 
       // Debug info
       auto debugLoc = GEP->getDebugLoc();
@@ -71,57 +71,78 @@ public:
 
       // Get index
       auto index_operand = GEP->getOperand(2);
-      // Check if index is constant value
+      // Check if index can be cast to a constant int value
+      // If so, we have constant int index, e.g. foo[10]
       if (auto CI = llvm::dyn_cast<llvm::ConstantInt>(index_operand)) {
-        int index = CI->getZExtValue();
-        // Verify location
+        int index = CI->getZExtValue(); // Extract constant int value, ZExt zero extends the value to 64 bits.
+        // Check if within bounds, otherwise display error
         if (index < 0 || index >= array_size) {
           auto message = fmt::format("out-of-bounds array access detected at {}:{}", fileName, fileLine);
           llvm::report_fatal_error(StringRef(message), false);
         }
       }
-      // Otherwise it's dynamic
+      // Otherwise it's a dynamic value
       else {
-        LLVM_DEBUG(dbgs() << "Dynamic index found\n");
-        /*WORKING ON THIS -Pim
-        int id = 1;
-        auto funcName = GEP->getFunction()->getName().str();
-        LLVM_DEBUG(dbgs() << funcName << " Hey :)\n");
-        LLVM_DEBUG(dbgs() << "a\n");
+        // In order to handle dynamic cases, we add an if-block before each GEP that checks if the
+        // index is within bounds. If not, we jump to a block that calls the assert function. Given
+        // a GEP instruction, the instruction gets transformed to:
+        //
+        //      ...
+        //      if (index out of bounds) 
+        //          jmp out_of_bounds_failure_block
+        //      else
+        //          jmp continue_block
+        //   out_of_bounds_failure_block:
+        //      call assert function
+        //      br continue_block # Note that this will never be reached because assert will exit the program
+        //   continue_block:
+        //      call GEP
+        //      ...
 
-        std::string if_name = fmt::format("if_block_{}_{}", funcName, id);
-        std::string else_name = fmt::format("else_block_{}_{}", funcName, id);
-        std::string end_name = fmt::format("end_block_{}_{}", funcName, id);
+        // Split the current block before and after the GEP instruction
+        BasicBlock* before_block = GEP->getParent();
+        // Create the failure block, where the assert function will be called
+        BasicBlock* failure_block = BasicBlock::Create(F.getContext(), "out_of_bounds_failure_block", &F);
+        // Create the after block, which is the block where the GEP function is called
+        BasicBlock* continue_block = before_block->splitBasicBlock(GEP->getIterator(), "continue_block");
+        before_block->getTerminator()->eraseFromParent(); // Required
 
-        llvm::BasicBlock *if_block = llvm::BasicBlock::Create(F.getContext(), if_name, &F);
-        llvm::BasicBlock *else_block = llvm::BasicBlock::Create(F.getContext(), else_name, &F);
-        llvm::BasicBlock *end_block = llvm::BasicBlock::Create(F.getContext(), end_name, &F);
+        // Create the conditional branch
+        Builder.SetInsertPoint(before_block);
 
-        Value* condition = Builder.getInt1(1);
+        // Create failure condition 1: index < 0
+        Value* condition1 = Builder.CreateICmpSLT(index_operand, Builder.getInt64(0));
+        // Create failure condition 2: index >= array_size
+        Value* condition2 = Builder.CreateICmpSGE(index_operand, Builder.getInt64(array_size));
+        // Create failure condition: condition 1 || condition 2
+        Value* condition = Builder.CreateOr(condition1, condition2);
+        Builder.CreateCondBr(condition, failure_block, continue_block);
 
-        Instruction* instr = Builder.CreateCondBr(condition, if_block, else_block);
+        // Create failure block
+        Builder.SetInsertPoint(failure_block);
+        // Create function arguments
+        auto message = "out-of-bounds array access";
+        Value* errorMessage = Builder.CreateGlobalStringPtr(message);
+        Value* errorFile = Builder.CreateGlobalStringPtr(fileName);
+        Value* errorLine = Builder.getInt32(fileLine);
+        std::vector<Value*> assertArgs = {
+            errorMessage,
+            errorFile,
+            errorLine
+        };
+        // Call function with arguments
+        Builder.CreateCall(Assert, assertArgs);
+        // Branch to continue, though this should never be reached because of the assertion failure 
+        Builder.CreateBr(continue_block); 
 
-        Builder.SetInsertPoint(if_block);
-        Builder.CreateBr(end_block);
-        Builder.SetInsertPoint(else_block);
-        Builder.CreateBr(end_block);
-        Builder.SetInsertPoint(end_block);
+        // Proceed with rest of the program
+        Builder.SetInsertPoint(continue_block);
 
-        LLVM_DEBUG(dbgs() << "e\n");
-        LLVM_DEBUG(dbgs() << instr << "\n");
-        GEP->insertBefore(instr);
-        LLVM_DEBUG(dbgs() << "f\n");
-        */
+        // Remove CFG analysis, as the control flow graph has changed
+        analyses.abandon((AnalysisKey*)CFGAnalyses::ID());
       }
-
-
-      // Error message template for dynamic case:
-
-      // auto message = "out-of-bounds array access";
-
     }
-
-    return PreservedAnalyses::all();
+    return analyses;
   }
 
 private:
